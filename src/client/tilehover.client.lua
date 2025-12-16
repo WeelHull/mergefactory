@@ -6,7 +6,7 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
-local State = require(script.Parent.TileInteractionState)
+local State = require(script.Parent.tileinteractionstate)
 local PlacementMode = require(script.Parent.placementmode_state)
 local mouse = player:GetMouse()
 

@@ -11,7 +11,7 @@ local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local Feedback = require(script.Parent.placement_feedback)
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
-local canPlaceFn = remotes:WaitForChild("canPlaceOnTile")
+local canPlaceFn = remotes:WaitForChild("canplaceontile")
 
 local ghostTemplate = ReplicatedStorage:WaitForChild("ghostplacement")
 

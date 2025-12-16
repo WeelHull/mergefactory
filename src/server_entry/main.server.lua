@@ -4,7 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local debugutil = require(game.ServerScriptService.Server.debugutil)
 local islandcontroller = require(game.ServerScriptService.Server.islandcontroller)
 local unlockcontroller = require(game.ServerScriptService.Server.unlockcontroller)
-local PlacementPermission = require(game.ServerScriptService.Server.modules.PlacementPermission)
+local PlacementPermission = require(game.ServerScriptService.Server.modules.placementpermission)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
@@ -112,7 +112,7 @@ Players.PlayerAdded:Connect(ensureStartUnlocked)
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local remotes = sharedFolder:WaitForChild("remotes")
 local tileunlockEvent = remotes:WaitForChild("tileunlock")
-local canPlaceFunction = remotes:WaitForChild("canPlaceOnTile")
+local canPlaceFunction = remotes:WaitForChild("canplaceontile")
 
 local function onTileUnlock(player, gridx, gridz)
 	debugutil.log("interaction", "decision", "tile unlock intent", {
@@ -164,7 +164,7 @@ tileunlockEvent.OnServerEvent:Connect(onTileUnlock)
 
 canPlaceFunction.OnServerInvoke = function(player, tile)
 	local allowed, reason = PlacementPermission.CanPlaceOnTile(player, tile)
-	debugutil.log("placement", "decision", "canPlaceOnTile result", {
+	debugutil.log("placement", "decision", "canplaceontile result", {
 		userid = player.UserId,
 		tile = tile,
 		allowed = allowed,

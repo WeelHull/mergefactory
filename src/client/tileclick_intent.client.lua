@@ -9,7 +9,7 @@ local camera = workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local UnlockFeedback = require(script.Parent.visuals.tile_unlock_feedback)
 local playerGui = player:WaitForChild("PlayerGui")
-local State = require(script.Parent.TileInteractionState)
+local State = require(script.Parent.tileinteractionstate)
 local PlacementMode = require(script.Parent.placementmode_state)
 local PlacementFeedback = require(script.Parent.placement_feedback)
 

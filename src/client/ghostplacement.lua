@@ -49,7 +49,7 @@ end
 hideGhost()
 
 local remotes = ReplicatedStorage.Shared.remotes
-local canPlaceFn = remotes:WaitForChild("canPlaceOnTile")
+local canPlaceFn = remotes:WaitForChild("canplaceontile")
 
 local lastTile
 local lastCanPlace

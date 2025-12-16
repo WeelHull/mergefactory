@@ -10,7 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local clock = os.clock
-local InteractionState = require(script.Parent.Parent.TileInteractionState)
+local InteractionState = require(script.Parent.Parent.tileinteractionstate)
 
 local shadow = {
 	interactionState = "Unknown",

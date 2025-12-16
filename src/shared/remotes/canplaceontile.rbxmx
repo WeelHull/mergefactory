@@ -1,7 +1,7 @@
 <roblox version="4">
   <Item class="RemoteFunction">
     <Properties>
-      <string name="Name">canPlaceOnTile</string>
+      <string name="Name">canplaceontile</string>
     </Properties>
   </Item>
 </roblox>

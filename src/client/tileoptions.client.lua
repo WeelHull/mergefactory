@@ -21,7 +21,7 @@ local currentGridX
 local currentGridZ
 local hoverAPI
 local clickConn
-local interactionState = require(script.Parent.TileInteractionState)
+local interactionState = require(script.Parent.tileinteractionstate)
 local forceClearHover
 
 local function closeBoard(reason)
