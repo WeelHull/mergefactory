@@ -2,6 +2,7 @@
 -- Ensures workspace container exists and provides in-memory registry helpers.
 
 local HttpService = game:GetService("HttpService")
+local IslandValidator = require(script.Parent.islandvalidator)
 
 local MachineRegistry = {}
 
@@ -153,6 +154,10 @@ function MachineRegistry.getMachinesForOwner(ownerUserId)
 end
 
 function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
+	if not IslandValidator.isValidIslandId(islandid) then
+		return false, nil
+	end
+
 	local islandKey = tostring(islandid)
 	local gridzKey = tostring(gridz)
 	local gridxKey = tostring(gridx)
@@ -168,11 +173,30 @@ function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
 	end
 
 	local id = row[gridxKey]
-	if typeof(id) == "string" and id ~= "" then
-		return true, id
+	if typeof(id) ~= "string" or id == "" then
+		row[gridxKey] = nil
+		if next(row) == nil then
+			island[gridzKey] = nil
+		end
+		if next(island) == nil then
+			tileOccupancy[islandKey] = nil
+		end
+		return false, nil
 	end
 
-	return false, nil
+	local model = MachineRegistry.get(id)
+	if not model then
+		row[gridxKey] = nil
+		if next(row) == nil then
+			island[gridzKey] = nil
+		end
+		if next(island) == nil then
+			tileOccupancy[islandKey] = nil
+		end
+		return false, nil
+	end
+
+	return true, id
 end
 
 function MachineRegistry.bindTile(machineId, islandid, gridx, gridz)

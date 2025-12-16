@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local debug = require(ServerScriptService.Server.debugutil)
+local IslandValidator = require(ServerScriptService.Server.islandvalidator)
 local machineregistry = require(ServerScriptService.Server.machineregistry)
 local machinerelocation = require(ServerScriptService.Server.machinerelocation)
 
@@ -96,36 +97,29 @@ local function onMachineIntent(player, payload)
 
 	local islandid = player and player:GetAttribute("islandid")
 	if TRACE then
-    debug.log("machine", "state", "intent trace", {
-        step = "island_attr",
-        userid = player and player.UserId,
-        islandid = islandid,
-        gridx = payload.gridx,
-        gridz = payload.gridz,
-    })
+		debug.log("machine", "state", "intent trace", {
+			step = "island_attr",
+			userid = player and player.UserId,
+			islandid = islandid,
+			gridx = payload.gridx,
+			gridz = payload.gridz,
+		})
 	end
 
-	-- gridregistry is not reliable for reverse island lookup; use registry occupancy per island.
-	if islandid == nil then
-		for possibleIsland = 1, math.huge do
-			local occupiedCandidate, machineIdCandidate = machineregistry.isTileOccupied(possibleIsland, payload.gridx, payload.gridz)
-			if occupiedCandidate then
-				islandid = possibleIsland
-				if TRACE then
-					debug.log("machine", "state", "intent trace", {
-						step = "island_resolved_by_registry",
-						islandid = islandid,
-						gridx = payload.gridx,
-						gridz = payload.gridz,
-						machineid = machineIdCandidate,
-					})
-				end
-				break
-			end
-			if possibleIsland > 999 then
-				break
-			end
-		end
+	local islandValid = IslandValidator.isValidIslandId(islandid)
+	if TRACE then
+		debug.log("machine", "state", "intent trace", {
+			step = "island_validated",
+			islandid = islandid,
+			is_valid = islandValid,
+			gridx = payload.gridx,
+			gridz = payload.gridz,
+		})
+	end
+
+	if not islandValid then
+		reject(player, payload, "island_not_resolved")
+		return
 	end
 
 	if islandid == nil then
