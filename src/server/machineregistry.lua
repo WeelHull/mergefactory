@@ -12,6 +12,20 @@ local machinesByOwner = {} -- machinesByOwner[userId][machineId] = true
 local machineTileById = {} -- machineTileById[machineId] = { islandid = number, gridx = number, gridz = number }
 local tileOccupancy = {} -- tileOccupancy[islandid][gridz][gridx] = machineId
 
+local function readMachineId(model)
+	local attr = model:GetAttribute("machineid")
+	if typeof(attr) == "string" and attr ~= "" then
+		return attr
+	end
+
+	attr = model:GetAttribute("machineId")
+	if typeof(attr) == "string" and attr ~= "" then
+		return attr
+	end
+
+	return nil
+end
+
 local function ensureMachinesFolder()
 	if machinesFolder and machinesFolder.Parent == workspace then
 		return machinesFolder
@@ -44,15 +58,6 @@ local function readOwnerUserId(model, ownerUserId)
 
 	local attr = model:GetAttribute("ownerUserId")
 	if typeof(attr) == "number" then
-		return attr
-	end
-
-	return nil
-end
-
-local function readMachineId(model)
-	local attr = model:GetAttribute("machineId")
-	if typeof(attr) == "string" and attr ~= "" then
 		return attr
 	end
 
