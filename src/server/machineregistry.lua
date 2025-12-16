@@ -168,7 +168,7 @@ function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
 	end
 
 	local id = row[gridxKey]
-	if id then
+	if typeof(id) == "string" and id ~= "" then
 		return true, id
 	end
 

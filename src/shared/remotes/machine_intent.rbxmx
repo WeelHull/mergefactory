@@ -1,0 +1,7 @@
+<roblox version="4">
+  <Item class="RemoteEvent">
+    <Properties>
+      <string name="Name">machine_intent</string>
+    </Properties>
+  </Item>
+</roblox>
