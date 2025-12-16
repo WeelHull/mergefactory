@@ -96,7 +96,7 @@ if api then
 	end)
 end
 
-local function forceClearHover()
+function forceClearHover()
 	if not hoverAPI then
 		hoverAPI = _G._tileHoverAPI
 	end
