@@ -3,9 +3,11 @@
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 
-local debug = require(script.Parent.debugutil)
-local gridregistry = require(script.Parent.gridregistry)
-local machineregistry = require(script.Parent.machineregistry)
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local debug = require(ServerScriptService.Server.debugutil)
+local gridregistry = require(ServerScriptService.Server.gridregistry)
+local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 
 local machinespawn = {}
 
@@ -13,7 +15,7 @@ local VALID_ROTATION = {
 	[0] = true,
 	[90] = true,
 	[180] = true,
-	[270] = true,
+	[360] = true,
 }
 
 local initLogged = false
@@ -159,7 +161,7 @@ function machinespawn.SpawnMachine(params)
 		return false, tileErr
 	end
 
-	local occupied, existingId = machineregistry.IsTileOccupied(islandid, gridx, gridz)
+	local occupied, existingId = MachineRegistry.IsTileOccupied(islandid, gridx, gridz)
 	if occupied then
 		warn("occupied", {
 			reason = "occupied",
@@ -239,7 +241,7 @@ function machinespawn.SpawnMachine(params)
 
 	clone.Parent = machinesFolder
 
-	local machineId = machineregistry.RegisterMachine(clone, ownerUserId)
+	local machineId = MachineRegistry.RegisterMachine(clone, ownerUserId)
 	if not machineId then
 		clone:Destroy()
 		errorLog("register_failed", {
@@ -251,9 +253,9 @@ function machinespawn.SpawnMachine(params)
 
 	clone:SetAttribute("machineId", machineId)
 
-	local bound = machineregistry.BindTile(machineId, islandid, gridx, gridz)
+	local bound = MachineRegistry.BindTile(machineId, islandid, gridx, gridz)
 	if not bound then
-		machineregistry.unregister(machineId)
+		MachineRegistry.unregister(machineId)
 		clone:Destroy()
 		errorLog("bind_failed", {
 			reason = "bind_failed",

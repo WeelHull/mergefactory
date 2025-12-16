@@ -1,28 +1,7 @@
--- machineregistry: runtime controller for machine instances (skeleton only).
+-- machineregistry (ModuleScript): runtime controller for machine models.
 -- Ensures workspace container exists and provides in-memory registry helpers.
 
 local HttpService = game:GetService("HttpService")
-
-local function purgeDuplicateScripts()
-	for _, instance in ipairs(game:GetDescendants()) do
-		if instance ~= script and instance:IsA("Script") and string.lower(instance.Name) == "machineregistry" then
-			instance:Destroy()
-		end
-	end
-end
-
-local debug = require(script.Parent.debugutil)
-
-script.Name = "machineregistry"
-
--- Guard: ensure bootstrap runs only once per server, but still purge duplicates.
-if _G._machineRegistryBootstrapped then
-	purgeDuplicateScripts()
-	return
-end
-_G._machineRegistryBootstrapped = true
-
-purgeDuplicateScripts()
 
 local MachineRegistry = {}
 
@@ -119,12 +98,6 @@ function MachineRegistry.register(model, ownerUserId)
 	local owner = readOwnerUserId(model, ownerUserId)
 	trackOwner(owner, machineId)
 
-	debug.log("machine", "state", "registered", {
-		machineid = machineId,
-		owner = owner,
-		model = model,
-	})
-
 	return machineId
 end
 
@@ -140,12 +113,6 @@ function MachineRegistry.unregister(machineId)
 
 	machinesById[machineId] = nil
 	local owner = untrackOwner(machineId)
-
-	debug.log("machine", "state", "unregistered", {
-		machineid = machineId,
-		owner = owner,
-		model = model,
-	})
 
 	local bound = machineTileById[machineId]
 	if bound then
@@ -281,9 +248,7 @@ function MachineRegistry.UnbindTile(machineId)
 	return MachineRegistry.unbindTile(machineId)
 end
 
-ensureMachinesFolder()
-debug.log("machine", "init", "registry ready", {
-	machines_folder = machinesFolder,
-})
+-- Expose folder helper for bootstrap.
+MachineRegistry.ensureMachinesFolder = ensureMachinesFolder
 
-_G.MachineRegistry = MachineRegistry
+return MachineRegistry
