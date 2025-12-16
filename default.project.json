@@ -1,0 +1,29 @@
+{
+  "name": "mergefactory",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      },
+      "entry": {
+        "$path": "src/server_entry"
+      }
+    },
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    }
+  }
+}

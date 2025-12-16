@@ -1,0 +1,7 @@
+<roblox version="4">
+  <Item class="RemoteFunction">
+    <Properties>
+      <string name="Name">canPlaceOnTile</string>
+    </Properties>
+  </Item>
+</roblox>
