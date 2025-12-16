@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
+local UnlockFeedback = require(script.Parent.visuals.tile_unlock_feedback)
 local playerGui = player:WaitForChild("PlayerGui")
 local State = require(script.Parent.TileInteractionState)
 local PlacementMode = require(script.Parent.placementmode_state)
@@ -168,6 +169,23 @@ local function getTargetFromMouse()
 	return result and result.Instance or nil
 end
 
+local function findTileByCoords(gridx, gridz)
+	if typeof(gridx) ~= "number" or typeof(gridz) ~= "number" then
+		return nil
+	end
+	local islandId = player:GetAttribute("islandid")
+	if not islandId then
+		return nil
+	end
+	local gridFolder = workspace:FindFirstChild("islands")
+	gridFolder = gridFolder and gridFolder:FindFirstChild("player_" .. tostring(islandId))
+	gridFolder = gridFolder and gridFolder:FindFirstChild("grid")
+	if not gridFolder then
+		return nil
+	end
+	return gridFolder:FindFirstChild(string.format("tile_z%d_x%d", gridz, gridx))
+end
+
 local function onInputBegan(input, gameProcessed)
 	if gameProcessed then
 		return
@@ -310,17 +328,21 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
-if tileunlockRemote then
-	tileunlockRemote.OnClientEvent:Connect(function(payload)
-		inFlight = false
-		local success = payload and payload.success
-		local key = payload and (payload.gridx .. "_" .. payload.gridz)
-		if not success then
-			lastBlockedKey = key
-			debugutil.log("interaction", "warn", "unlock response blocked", payload or {})
-		else
-			lastBlockedKey = nil
-			debugutil.log("interaction", "state", "unlock response success", payload or {})
-		end
-	end)
-end
+	if tileunlockRemote then
+		tileunlockRemote.OnClientEvent:Connect(function(payload)
+			inFlight = false
+			local success = payload and payload.success
+			local key = payload and (payload.gridx .. "_" .. payload.gridz)
+			if not success then
+				lastBlockedKey = key
+				debugutil.log("interaction", "warn", "unlock response blocked", payload or {})
+			else
+				lastBlockedKey = nil
+				debugutil.log("interaction", "state", "unlock response success", payload or {})
+				local tile = payload and findTileByCoords(payload.gridx, payload.gridz)
+				if tile then
+					UnlockFeedback.play(tile)
+				end
+			end
+		end)
+	end
