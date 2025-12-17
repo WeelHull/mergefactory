@@ -5,6 +5,7 @@ local debugutil = require(game.ServerScriptService.Server.debugutil)
 local islandcontroller = require(game.ServerScriptService.Server.islandcontroller)
 local unlockcontroller = require(game.ServerScriptService.Server.unlockcontroller)
 local PlacementPermission = require(game.ServerScriptService.Server.modules.placementpermission)
+local MachineRegistry = require(game.ServerScriptService.Server.machineregistry)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
@@ -162,13 +163,26 @@ end
 
 tileunlockEvent.OnServerEvent:Connect(onTileUnlock)
 
-canPlaceFunction.OnServerInvoke = function(player, tile)
+canPlaceFunction.OnServerInvoke = function(player, tile, ignoreMachineId)
 	local allowed, reason = PlacementPermission.CanPlaceOnTile(player, tile)
+	if allowed and tile then
+		local gridx = tile:GetAttribute("gridx")
+		local gridz = tile:GetAttribute("gridz")
+		local islandid = player:GetAttribute("islandid")
+		if typeof(gridx) == "number" and typeof(gridz) == "number" and typeof(islandid) == "number" then
+			local occupied, occupantId = MachineRegistry.IsTileOccupied(islandid, gridx, gridz)
+			if occupied and occupantId ~= ignoreMachineId then
+				allowed = false
+				reason = "tile_occupied"
+			end
+		end
+	end
 	debugutil.log("placement", "decision", "canplaceontile result", {
 		userid = player.UserId,
 		tile = tile,
 		allowed = allowed,
 		reason = reason,
+		ignore = ignoreMachineId,
 	})
 	return allowed, reason
 end

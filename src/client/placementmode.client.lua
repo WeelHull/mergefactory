@@ -28,6 +28,7 @@ local lastReason
 local currentEvaluatedTile
 local placementPayload = nil
 local stateModule = require(script.Parent.placementmode_state)
+local MachineInteractionState = require(script.Parent.machineinteraction_state)
 
 local function log(level, message, data)
 	if not PLACEMENT_DEBUG then
@@ -61,6 +62,12 @@ local function ensureGhost()
 		return ghost
 	end
 	if placementPayload and placementPayload.kind == "machine" then
+		local previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
+		local preview = previewsFolder:FindFirstChild(previewName)
+		if preview and preview:IsA("Model") then
+			ghost = preview:Clone()
+		end
+	elseif placementPayload and placementPayload.kind == "relocate" then
 		local previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
 		local preview = previewsFolder:FindFirstChild(previewName)
 		if preview and preview:IsA("Model") then
@@ -157,7 +164,8 @@ local function updatePermission(tile)
 	lastPermission = nil
 	lastReason = nil
 
-	local allowed, reason = canPlaceFn:InvokeServer(tile)
+	local ignoreMachineId = placementPayload and placementPayload.kind == "relocate" and placementPayload.machineId or nil
+	local allowed, reason = canPlaceFn:InvokeServer(tile, ignoreMachineId)
 
 	if allowed == lastPermission and reason == lastReason then
 		return lastPermission
@@ -267,6 +275,7 @@ local function confirm(input)
 			gridz = gz,
 			rotation = placementPayload.rotation or 0,
 		})
+		MachineInteractionState.SetRelocating(false)
 	end
 	_G._placementInputConsumed.consumed = true
 	_G._placementInputConsumed.button = input and input.UserInputType or Enum.UserInputType.MouseButton1
@@ -289,6 +298,30 @@ cancel = function(input)
 			debugutil.log("placement", "state", "cancel_relocate", {
 				machineId = placementPayload.machineId,
 			})
+			MachineInteractionState.SetRelocating(false)
+			if placementPayload.machineId then
+				local machinesFolder = workspace:FindFirstChild("machines")
+				if machinesFolder then
+					for _, m in ipairs(machinesFolder:GetChildren()) do
+						if m:GetAttribute("machineId") == placementPayload.machineId or m:GetAttribute("machineid") == placementPayload.machineId then
+							local adornee = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart", true)
+							if adornee then
+								local playerGui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+								local editOptions = playerGui and playerGui:FindFirstChild("editoptions")
+								if editOptions then
+									editOptions.Adornee = adornee
+									editOptions.Enabled = true
+									debugutil.log("machine", "state", "editoptions_open", {
+										adornee = adornee:GetFullName(),
+										machine = m:GetFullName(),
+									})
+								end
+							end
+							break
+						end
+					end
+				end
+			end
 		end
 	end
 	destroyGhost("cancel")
@@ -313,6 +346,7 @@ local function enterPlacement(payload)
 			machineType = placementPayload.machineType,
 			tier = placementPayload.tier,
 		})
+		MachineInteractionState.SetRelocating(true)
 	else
 		log("state", "enter", { state = "Placing" })
 	end

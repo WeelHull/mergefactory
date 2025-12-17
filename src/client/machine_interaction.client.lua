@@ -32,6 +32,13 @@ local selectedHighlight
 local editOptions = playerGui:WaitForChild("editoptions")
 local editOptionsConnected = false
 
+local function resolveGrid(model)
+	if not model then
+		return nil, nil
+	end
+	return model:GetAttribute("gridx"), model:GetAttribute("gridz")
+end
+
 local function getMachineId(model)
 	if not model then
 		return nil
@@ -73,6 +80,8 @@ local function handleMove()
 	local tier = currentSelected:GetAttribute("tier")
 	local rotation = currentSelected:GetAttribute("rotation")
 	local gridx, gridz = resolveGrid(currentSelected)
+
+	MachineInteractionState.SetRelocating(true)
 
 	debug.log("machine", "decision", "move_pressed", {
 		machine = currentSelected:GetFullName(),
@@ -232,6 +241,7 @@ local function clearSelected()
 		selectedHighlight.Parent = nil
 	end
 	MachineInteractionState.SetActive(false)
+	MachineInteractionState.SetRelocating(false)
 	if editOptions then
 		editOptions.Enabled = false
 		editOptions.Adornee = nil
@@ -253,13 +263,6 @@ local function resolveMachine(target)
 	end
 
 	return nil
-end
-
-local function resolveGrid(model)
-	if not model then
-		return nil, nil
-	end
-	return model:GetAttribute("gridx"), model:GetAttribute("gridz")
 end
 
 local function setHover(machine)

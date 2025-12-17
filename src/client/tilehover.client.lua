@@ -180,7 +180,7 @@ local function handleMouseMove()
 	end
 	placementBlockedLogged = false
 
-	if MachineInteractionState.IsActive() then
+	if MachineInteractionState.IsActive() and not MachineInteractionState.IsRelocating() then
 		if not machineBlockedLogged then
 			debugutil.log("interaction", "state", "hover skipped", { reason = "machine_active" })
 			machineBlockedLogged = true
