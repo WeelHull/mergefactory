@@ -209,7 +209,7 @@ end
 
 local cancel
 
-	local function confirm(input)
+local function confirm(input)
 	if state ~= "Valid" then
 		-- invalid click while in placement: provide user feedback without changing flow
 		if stateModule.IsActive() then
@@ -250,6 +250,23 @@ local cancel
 			gridz = gz,
 			rotation = 0,
 		})
+	elseif placementPayload and placementPayload.kind == "relocate" and lastTile then
+		local gx = lastTile:GetAttribute("gridx")
+		local gz = lastTile:GetAttribute("gridz")
+		debugutil.log("placement", "state", "confirm_relocate", {
+			gridx = gx,
+			gridz = gz,
+			machineId = placementPayload.machineId,
+		})
+		placeMachineEvent:FireServer({
+			kind = "relocate",
+			machineId = placementPayload.machineId,
+			machineType = placementPayload.machineType,
+			tier = placementPayload.tier,
+			gridx = gx,
+			gridz = gz,
+			rotation = placementPayload.rotation or 0,
+		})
 	end
 	_G._placementInputConsumed.consumed = true
 	_G._placementInputConsumed.button = input and input.UserInputType or Enum.UserInputType.MouseButton1
@@ -284,10 +301,17 @@ local function enterPlacement(payload)
 			machineType = placementPayload.machineType,
 			tier = placementPayload.tier,
 		})
+	elseif placementPayload.kind == "relocate" then
+		debugutil.log("placement", "state", "enter_relocate", {
+			machineId = placementPayload.machineId,
+			machineType = placementPayload.machineType,
+			tier = placementPayload.tier,
+		})
 	else
 		log("state", "enter", { state = "Placing" })
 	end
 end
+stateModule.SetEnterCallback(enterPlacement)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then

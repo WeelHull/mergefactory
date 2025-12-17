@@ -14,6 +14,7 @@ local VALID_ROTATION = {
 	[0] = true,
 	[90] = true,
 	[180] = true,
+	[270] = true,
 	[360] = true,
 }
 

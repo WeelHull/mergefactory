@@ -16,6 +16,7 @@ local machineIntentEvent = remotes:WaitForChild("machine_intent")
 local debug = require(ReplicatedStorage.Shared.debugutil)
 local MachineInteraction = {}
 local MachineInteractionState = require(script.Parent.machineinteraction_state)
+local PlacementModeState = require(script.Parent.placementmode_state)
 
 local machinesFolder = Workspace:WaitForChild("machines")
 
@@ -31,6 +32,13 @@ local selectedHighlight
 local editOptions = playerGui:WaitForChild("editoptions")
 local editOptionsConnected = false
 
+local function getMachineId(model)
+	if not model then
+		return nil
+	end
+	return model:GetAttribute("machineId") or model:GetAttribute("machineid")
+end
+
 local function logState(message, data)
 	debug.log("machine", "state", message, data)
 end
@@ -39,30 +47,86 @@ local function handleDelete()
 	if not currentSelected then
 		return
 	end
+	local machineId = getMachineId(currentSelected)
 	debug.log("machine", "decision", "delete_pressed", {
 		machine = currentSelected:GetFullName(),
+		machineId = machineId,
 	})
-	debug.log("machine", "warn", "delete not implemented", {})
+	if not machineId then
+		debug.log("machine", "warn", "missing_machine_id", {
+			machine = currentSelected:GetFullName(),
+		})
+		return
+	end
+	machineIntentEvent:FireServer({
+		intent = "delete",
+		machineId = machineId,
+	})
 end
 
 local function handleMove()
 	if not currentSelected then
 		return
 	end
+	local machineId = getMachineId(currentSelected)
+	local machineType = currentSelected:GetAttribute("machineType")
+	local tier = currentSelected:GetAttribute("tier")
+	local rotation = currentSelected:GetAttribute("rotation")
+
 	debug.log("machine", "decision", "move_pressed", {
 		machine = currentSelected:GetFullName(),
+		machineId = machineId,
 	})
-	debug.log("machine", "warn", "move not implemented", {})
+
+	if machineId then
+		machineIntentEvent:FireServer({
+			intent = "move",
+			machineId = machineId,
+		})
+	else
+		debug.log("machine", "warn", "missing_machine_id", {
+			machine = currentSelected:GetFullName(),
+		})
+		return
+	end
+
+	if editOptions then
+		editOptions.Enabled = false
+		editOptions.Adornee = nil
+	end
+
+	local payload = {
+		kind = "relocate",
+		machineId = machineId,
+		machineType = machineType,
+		tier = tier,
+		rotation = rotation,
+	}
+
+	clearSelected()
+	PlacementModeState.RequestEnter(payload)
 end
 
 local function handleRotate()
 	if not currentSelected then
 		return
 	end
+	local machineId = getMachineId(currentSelected)
 	debug.log("machine", "decision", "rotate_pressed", {
 		machine = currentSelected:GetFullName(),
+		machineId = machineId,
 	})
-	debug.log("machine", "warn", "rotate not implemented", {})
+	if not machineId then
+		debug.log("machine", "warn", "missing_machine_id", {
+			machine = currentSelected:GetFullName(),
+		})
+		return
+	end
+	machineIntentEvent:FireServer({
+		intent = "rotate",
+		machineId = machineId,
+		delta = 90,
+	})
 end
 
 local function connectEditOptions()
