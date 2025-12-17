@@ -7,12 +7,14 @@ local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
+local PlacementMode = require(script.Parent.placementmode_state)
 
 debugutil.log("placement", "init", "ghost placement controller ready")
 
 local ghostTemplate = ReplicatedStorage:WaitForChild("ghostplacement")
 local ghost = ghostTemplate:Clone()
 ghost.Parent = workspace
+debugutil.log("preview", "state", "created", {})
 
 local function setGhostCollision(enabled)
 	for _, part in ipairs(ghost:GetDescendants()) do
@@ -47,6 +49,7 @@ local function hideGhost()
 end
 
 hideGhost()
+local previewVisible = false
 
 local remotes = ReplicatedStorage.Shared.remotes
 local canPlaceFn = remotes:WaitForChild("canplaceontile")
@@ -138,11 +141,27 @@ local function getTileHit()
 end
 
 RunService.RenderStepped:Connect(function()
+	local placementActive = PlacementMode.IsActive()
+	if not placementActive then
+		lastTile = nil
+		lastCanPlace = nil
+		if previewVisible then
+			setGhostVisible(false)
+			previewVisible = false
+			debugutil.log("preview", "state", "placement_exit_hide", {})
+		end
+		return
+	end
+
 	local tile = getTileHit()
 	if not tile then
 		lastTile = nil
 		lastCanPlace = nil
-		hideGhost()
+		if previewVisible then
+			setGhostVisible(false)
+			previewVisible = false
+			debugutil.log("preview", "state", "hidden_no_hover", {})
+		end
 		return
 	end
 
@@ -153,7 +172,14 @@ RunService.RenderStepped:Connect(function()
 	local allowed = updatePermission(tile)
 
 	positionGhost(tile)
-	setGhostVisible(true)
+	local shouldBeVisible = placementActive and tile ~= nil
+	if shouldBeVisible and not previewVisible then
+		setGhostVisible(true)
+		previewVisible = true
+		debugutil.log("preview", "state", "visible_on_hover", {
+			tile = tile:GetFullName(),
+		})
+	end
 	if allowed then
 		setGhostTint(Color3.fromRGB(80, 180, 80))
 	else
