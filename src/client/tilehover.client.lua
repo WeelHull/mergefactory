@@ -180,15 +180,18 @@ local function handleMouseMove()
 	end
 	placementBlockedLogged = false
 
-	if MachineInteractionState.IsActive() and not MachineInteractionState.IsRelocating() then
-		if not machineBlockedLogged then
-			debugutil.log("interaction", "state", "hover skipped", { reason = "machine_active" })
-			machineBlockedLogged = true
-		end
-		ForceClearHover()
-		return
+if MachineInteractionState.IsActive() and not MachineInteractionState.IsRelocating() then
+	if not machineBlockedLogged then
+		debugutil.log("interaction", "state", "hover skipped", { reason = "machine_active" })
+		machineBlockedLogged = true
 	end
+	ForceClearHover()
+	return
+elseif MachineInteractionState.IsRelocating() and machineBlockedLogged then
+	debugutil.log("interaction", "state", "hover unblocked", { reason = "relocating" })
 	machineBlockedLogged = false
+end
+machineBlockedLogged = false
 
 	local st = State.GetState()
 	if st == "Pending" or st == "Confirmed" then

@@ -174,6 +174,9 @@ canPlaceFunction.OnServerInvoke = function(player, tile, ignoreMachineId)
 			if occupied and occupantId ~= ignoreMachineId then
 				allowed = false
 				reason = "tile_occupied"
+			elseif occupied and occupantId == ignoreMachineId then
+				allowed = true
+				reason = "self_tile"
 			end
 		end
 	end

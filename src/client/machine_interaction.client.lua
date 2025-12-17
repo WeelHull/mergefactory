@@ -81,7 +81,7 @@ local function handleMove()
 	local rotation = currentSelected:GetAttribute("rotation")
 	local gridx, gridz = resolveGrid(currentSelected)
 
-	MachineInteractionState.SetRelocating(true)
+	MachineInteractionState.SetRelocating(true, "move_pressed")
 
 	debug.log("machine", "decision", "move_pressed", {
 		machine = currentSelected:GetFullName(),
@@ -118,9 +118,11 @@ local function handleMove()
 		machineType = machineType,
 		tier = tier,
 		rotation = rotation,
+		fromGridX = gridx,
+		fromGridZ = gridz,
+		ignoreMachineId = machineId,
 	}
 
-	clearSelected()
 	local entered = PlacementModeState.RequestEnter(payload)
 	if not entered then
 		debug.log("machine", "warn", "move_enter_failed", {
