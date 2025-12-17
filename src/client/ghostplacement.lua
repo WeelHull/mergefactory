@@ -28,14 +28,6 @@ end
 
 setGhostCollision(false)
 
-local function setGhostVisible(visible)
-	for _, part in ipairs(ghost:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.Transparency = visible and 0.2 or 1
-		end
-	end
-end
-
 local function setGhostTint(color)
 	for _, part in ipairs(ghost:GetDescendants()) do
 		if part:IsA("BasePart") then
@@ -44,12 +36,17 @@ local function setGhostTint(color)
 	end
 end
 
-local function hideGhost()
-	setGhostVisible(false)
+local function setPreviewVisible(model, visible)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.LocalTransparencyModifier = visible and 0 or 1
+		end
+	end
 end
 
-hideGhost()
 local previewVisible = false
+setPreviewVisible(ghost, false)
+debugutil.log("preview", "state", "hidden_no_hover", {})
 
 local remotes = ReplicatedStorage.Shared.remotes
 local canPlaceFn = remotes:WaitForChild("canplaceontile")
@@ -75,7 +72,11 @@ end
 local function onCharacterAdded()
 	lastTile = nil
 	lastCanPlace = nil
-	hideGhost()
+	setPreviewVisible(ghost, false)
+	if previewVisible then
+		debugutil.log("preview", "state", "hidden_no_hover", {})
+	end
+	previewVisible = false
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
@@ -146,9 +147,9 @@ RunService.RenderStepped:Connect(function()
 		lastTile = nil
 		lastCanPlace = nil
 		if previewVisible then
-			setGhostVisible(false)
+			setPreviewVisible(ghost, false)
 			previewVisible = false
-			debugutil.log("preview", "state", "placement_exit_hide", {})
+			debugutil.log("preview", "state", "hidden_no_hover", {})
 		end
 		return
 	end
@@ -158,7 +159,7 @@ RunService.RenderStepped:Connect(function()
 		lastTile = nil
 		lastCanPlace = nil
 		if previewVisible then
-			setGhostVisible(false)
+			setPreviewVisible(ghost, false)
 			previewVisible = false
 			debugutil.log("preview", "state", "hidden_no_hover", {})
 		end
@@ -174,7 +175,7 @@ RunService.RenderStepped:Connect(function()
 	positionGhost(tile)
 	local shouldBeVisible = placementActive and tile ~= nil
 	if shouldBeVisible and not previewVisible then
-		setGhostVisible(true)
+		setPreviewVisible(ghost, true)
 		previewVisible = true
 		debugutil.log("preview", "state", "visible_on_hover", {
 			tile = tile:GetFullName(),
