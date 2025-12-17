@@ -2,19 +2,22 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local camera = Workspace.CurrentCamera
 
-local debugutil = require(ReplicatedStorage.Shared.debugutil)
+local DebugUtil = require(ReplicatedStorage.Shared.debugutil)
 local PlacementMode = require(script.Parent.placementmode_state)
 
-debugutil.log("placement", "init", "ghost placement controller ready")
+DebugUtil.log("placement", "init", "ghost placement controller ready")
+
+local PREVIEW_ROOT = ReplicatedStorage:WaitForChild("Previews")
 
 local ghostTemplate = ReplicatedStorage:WaitForChild("ghostplacement")
 local ghost = ghostTemplate:Clone()
-ghost.Parent = workspace
-debugutil.log("preview", "state", "created", {})
+ghost.Parent = PREVIEW_ROOT
+DebugUtil.log("preview", "state", "created", {})
 
 local function setGhostCollision(enabled)
 	for _, part in ipairs(ghost:GetDescendants()) do
@@ -36,23 +39,27 @@ local function setGhostTint(color)
 	end
 end
 
-local function setPreviewVisible(model, visible)
-	for _, inst in ipairs(model:GetDescendants()) do
-		if inst:IsA("BasePart") then
-			inst.LocalTransparencyModifier = visible and 0 or 1
-		end
-	end
-end
-
-local previewVisible = false
-setPreviewVisible(ghost, false)
-debugutil.log("preview", "state", "hidden_no_hover", {})
-
 local remotes = ReplicatedStorage.Shared.remotes
 local canPlaceFn = remotes:WaitForChild("canplaceontile")
 
 local lastTile
 local lastCanPlace
+local lastPlacementActive = false
+local lastHoverValid = false
+
+local function mountGhost(reason)
+	if ghost.Parent ~= Workspace then
+		ghost.Parent = Workspace
+		DebugUtil.log("ghost", "state", "mounted", { reason = reason })
+	end
+end
+
+local function unmountGhost(reason)
+	if ghost.Parent ~= PREVIEW_ROOT then
+		ghost.Parent = PREVIEW_ROOT
+		DebugUtil.log("ghost", "state", "unmounted", { reason = reason })
+	end
+end
 
 local function updatePermission(tile)
 	if tile == lastTile and lastCanPlace ~= nil then
@@ -61,7 +68,7 @@ local function updatePermission(tile)
 	local allowed, reason = canPlaceFn:InvokeServer(tile)
 	lastTile = tile
 	lastCanPlace = allowed
-	debugutil.log("placement", "decision", "permission_result", {
+	DebugUtil.log("placement", "decision", "permission_result", {
 		tile = tile:GetFullName(),
 		allowed = allowed,
 		reason = reason,
@@ -72,11 +79,7 @@ end
 local function onCharacterAdded()
 	lastTile = nil
 	lastCanPlace = nil
-	setPreviewVisible(ghost, false)
-	if previewVisible then
-		debugutil.log("preview", "state", "hidden_no_hover", {})
-	end
-	previewVisible = false
+	unmountGhost("character_added_no_hover")
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
@@ -141,49 +144,63 @@ local function getTileHit()
 	return inst
 end
 
-RunService.RenderStepped:Connect(function()
-	local placementActive = PlacementMode.IsActive()
+local function updateGhostMount(placementActive, tile, hoverValid, reason)
 	if not placementActive then
-		lastTile = nil
-		lastCanPlace = nil
-		if previewVisible then
-			setPreviewVisible(ghost, false)
-			previewVisible = false
-			debugutil.log("preview", "state", "hidden_no_hover", {})
-		end
+		unmountGhost(reason or "placement_inactive")
 		return
 	end
 
+	if not tile then
+		unmountGhost(reason or "no_hover")
+		return
+	end
+
+	if not hoverValid then
+		unmountGhost(reason or "hover_invalid")
+		return
+	end
+
+	mountGhost(reason or "hover_valid")
+end
+
+RunService.RenderStepped:Connect(function()
+	local placementActive = PlacementMode.IsActive()
+	local placementChanged = placementActive ~= lastPlacementActive
 	local tile = getTileHit()
+
+	if placementChanged and not placementActive then
+		lastTile = nil
+		lastCanPlace = nil
+		updateGhostMount(false, nil, false, "placement_exit_force")
+	end
+	lastPlacementActive = placementActive
+
+	if not placementActive then
+		return
+	end
+
 	if not tile then
 		lastTile = nil
 		lastCanPlace = nil
-		if previewVisible then
-			setPreviewVisible(ghost, false)
-			previewVisible = false
-			debugutil.log("preview", "state", "hidden_no_hover", {})
-		end
+		updateGhostMount(placementActive, nil, false, "no_hover")
 		return
 	end
 
 	if tile ~= lastTile then
-		debugutil.log("placement", "state", "tile_hover_change", { tile = tile:GetFullName() })
+		DebugUtil.log("placement", "state", "tile_hover_change", { tile = tile:GetFullName() })
 	end
 
 	local allowed = updatePermission(tile)
+	local permissionChanged = (allowed ~= lastCanPlace)
 
 	positionGhost(tile)
-	local shouldBeVisible = placementActive and tile ~= nil
-	if shouldBeVisible and not previewVisible then
-		setPreviewVisible(ghost, true)
-		previewVisible = true
-		debugutil.log("preview", "state", "visible_on_hover", {
-			tile = tile:GetFullName(),
-		})
-	end
 	if allowed then
 		setGhostTint(Color3.fromRGB(80, 180, 80))
 	else
 		setGhostTint(Color3.fromRGB(220, 80, 80))
+	end
+
+	if placementChanged or tile ~= lastTile or permissionChanged then
+		updateGhostMount(placementActive, tile, allowed, placementChanged and (placementActive and "placement_enter" or "placement_exit") or (permissionChanged and "permission_result" or "hover_change"))
 	end
 end)
