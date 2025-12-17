@@ -217,40 +217,6 @@ function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
 
 	local id = row[gridxKey]
 	if typeof(id) ~= "string" or id == "" then
-		debug.log("machineregistry", "state", "occupancy clear", {
-			func = "isTileOccupied",
-			islandid = islandid,
-			gridx = gridx,
-			gridz = gridz,
-			path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
-			table_id = tostring(row),
-			previous = id,
-		})
-		row[gridxKey] = nil
-		if next(row) == nil then
-			debug.log("machineregistry", "state", "occupancy clear", {
-				func = "isTileOccupied",
-				islandid = islandid,
-				gridx = gridx,
-				gridz = gridz,
-				path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
-				table_id = tostring(island[gridzKey]),
-				previous = "<row emptied>",
-			})
-			island[gridzKey] = nil
-		end
-		if next(island) == nil then
-			debug.log("machineregistry", "state", "occupancy clear", {
-				func = "isTileOccupied",
-				islandid = islandid,
-				gridx = gridx,
-				gridz = gridz,
-				path = string.format("tileOccupancy[%s]", islandKey),
-				table_id = tostring(tileOccupancy[islandKey]),
-				previous = "<island emptied>",
-			})
-			tileOccupancy[islandKey] = nil
-		end
 		debug.log("machineregistry", "state", "IsTileOccupied result", {
 			islandid = islandid,
 			gridx = gridx,
@@ -262,40 +228,6 @@ function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
 
 	local model = MachineRegistry.get(id)
 	if not model then
-		debug.log("machineregistry", "state", "occupancy clear", {
-			func = "isTileOccupied",
-			islandid = islandid,
-			gridx = gridx,
-			gridz = gridz,
-			path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
-			table_id = tostring(row),
-			previous = id,
-		})
-		row[gridxKey] = nil
-		if next(row) == nil then
-			debug.log("machineregistry", "state", "occupancy clear", {
-				func = "isTileOccupied",
-				islandid = islandid,
-				gridx = gridx,
-				gridz = gridz,
-				path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
-				table_id = tostring(island[gridzKey]),
-				previous = "<row emptied>",
-			})
-			island[gridzKey] = nil
-		end
-		if next(island) == nil then
-			debug.log("machineregistry", "state", "occupancy clear", {
-				func = "isTileOccupied",
-				islandid = islandid,
-				gridx = gridx,
-				gridz = gridz,
-				path = string.format("tileOccupancy[%s]", islandKey),
-				table_id = tostring(tileOccupancy[islandKey]),
-				previous = "<island emptied>",
-			})
-			tileOccupancy[islandKey] = nil
-		end
 		debug.log("machineregistry", "state", "IsTileOccupied result", {
 			islandid = islandid,
 			gridx = gridx,
