@@ -1,13 +1,15 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-local camera = workspace.CurrentCamera
+local camera = Workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local State = require(script.Parent.tileinteractionstate)
 local PlacementMode = require(script.Parent.placementmode_state)
+local MachineInteractionState = require(script.Parent.machineinteraction_state)
 local mouse = player:GetMouse()
 
 local HIGHLIGHT_COLOR_VALID = Color3.fromRGB(80, 180, 80)
@@ -29,6 +31,32 @@ local clearedLogged = false
 local unexpectedLogged = false
 local hasLoggedStateLock = false
 local placementBlockedLogged = false
+local machineBlockedLogged = false
+local machinesFolder = Workspace:WaitForChild("machines")
+
+local function clearHoverForMachine()
+	if not currentHovered then
+		return
+	end
+	currentHovered = nil
+	highlight.Enabled = false
+	highlight.Adornee = nil
+	State.ClearHoveredTile()
+	State.SetState("Idle", "over_machine")
+	clearedLogged = true
+end
+
+local function isOverMachine(inst)
+	local node = inst
+	while node do
+		if node:IsA("Model") and node.Parent == machinesFolder then
+			return true
+		end
+		node = node.Parent
+	end
+	return false
+end
+
 local function ForceClearHover()
 	if currentHovered then
 		debugutil.log("interaction", "state", "hover force-cleared", { reason = "external_cancel" })
@@ -134,6 +162,15 @@ local function setHover(part)
 end
 
 local function handleMouseMove()
+	local target = mouse.Target
+	if target and isOverMachine(target) then
+		return
+	end
+	if isOverMachine(target) then
+		clearHoverForMachine()
+		return
+	end
+
 	if PlacementMode.IsActive() then
 		if not placementBlockedLogged then
 			debugutil.log("interaction", "state", "hover blocked", { reason = "placement_active" })
@@ -142,6 +179,16 @@ local function handleMouseMove()
 		return
 	end
 	placementBlockedLogged = false
+
+	if MachineInteractionState.IsActive() then
+		if not machineBlockedLogged then
+			debugutil.log("interaction", "state", "hover skipped", { reason = "machine_active" })
+			machineBlockedLogged = true
+		end
+		ForceClearHover()
+		return
+	end
+	machineBlockedLogged = false
 
 	local st = State.GetState()
 	if st == "Pending" or st == "Confirmed" then

@@ -12,8 +12,10 @@ local Feedback = require(script.Parent.placement_feedback)
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
 local canPlaceFn = remotes:WaitForChild("canplaceontile")
+local placeMachineEvent = remotes:WaitForChild("place_machine")
 
 local ghostTemplate = ReplicatedStorage:WaitForChild("ghostplacement")
+local previewsFolder = ReplicatedStorage:WaitForChild("previews")
 
 -- shared click barrier
 _G._placementInputConsumed = _G._placementInputConsumed or { consumed = false, button = nil }
@@ -24,6 +26,7 @@ local lastTile
 local lastPermission
 local lastReason
 local currentEvaluatedTile
+local placementPayload = nil
 local stateModule = require(script.Parent.placementmode_state)
 
 local function log(level, message, data)
@@ -48,6 +51,7 @@ local function destroyGhost(reason)
 	end
 	lastTile = nil
 	lastPermission = nil
+	placementPayload = nil
 	log("state", "exit", { reason = reason or "destroy" })
 	setState("Idle")
 end
@@ -56,13 +60,23 @@ local function ensureGhost()
 	if ghost then
 		return ghost
 	end
-	ghost = ghostTemplate:Clone()
+	if placementPayload and placementPayload.kind == "machine" then
+		local previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
+		local preview = previewsFolder:FindFirstChild(previewName)
+		if preview and preview:IsA("Model") then
+			ghost = preview:Clone()
+		end
+	end
+	if not ghost then
+		ghost = ghostTemplate:Clone()
+		end
 	ghost.Parent = workspace
 	for _, part in ipairs(ghost:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
 			part.CanTouch = false
 			part.CanQuery = false
+			part.Anchored = true
 		end
 	end
 	return ghost
@@ -70,6 +84,9 @@ end
 
 local function setGhostVisible(visible, allowed)
 	if not ghost then
+		return
+	end
+	if placementPayload and placementPayload.kind == "machine" then
 		return
 	end
 	for _, part in ipairs(ghost:GetDescendants()) do
@@ -192,7 +209,7 @@ end
 
 local cancel
 
-local function confirm(input)
+	local function confirm(input)
 	if state ~= "Valid" then
 		-- invalid click while in placement: provide user feedback without changing flow
 		if stateModule.IsActive() then
@@ -217,6 +234,23 @@ local function confirm(input)
 		return
 	end
 	log("decision", "confirm")
+	if placementPayload and placementPayload.kind == "machine" and lastTile then
+		local gx = lastTile:GetAttribute("gridx")
+		local gz = lastTile:GetAttribute("gridz")
+		debugutil.log("placement", "state", "confirm_machine", {
+			gridx = gx,
+			gridz = gz,
+			machineType = placementPayload.machineType,
+			tier = placementPayload.tier,
+		})
+		placeMachineEvent:FireServer({
+			machineType = placementPayload.machineType,
+			tier = placementPayload.tier,
+			gridx = gx,
+			gridz = gz,
+			rotation = 0,
+		})
+	end
 	_G._placementInputConsumed.consumed = true
 	_G._placementInputConsumed.button = input and input.UserInputType or Enum.UserInputType.MouseButton1
 	stateModule.SetActive(false, "confirm")
@@ -231,17 +265,28 @@ cancel = function(input)
 	_G._placementInputConsumed.consumed = true
 	_G._placementInputConsumed.button = input and input.UserInputType or Enum.UserInputType.MouseButton1
 	stateModule.SetActive(false, "cancel")
+	if placementPayload and placementPayload.kind == "machine" then
+		debugutil.log("placement", "state", "cancel_machine", {})
+	end
 	destroyGhost("cancel")
 end
 
-local function enterPlacement()
+local function enterPlacement(payload)
 	if state ~= "Idle" then
 		cancel()
 	end
+	placementPayload = payload or { kind = "tile" }
 	ensureGhost()
 	stateModule.SetActive(true, "enter")
 	setState("Placing", "enter")
-	log("state", "enter", { state = "Placing" })
+	if placementPayload.kind == "machine" then
+		debugutil.log("placement", "state", "enter_machine", {
+			machineType = placementPayload.machineType,
+			tier = placementPayload.tier,
+		})
+	else
+		log("state", "enter", { state = "Placing" })
+	end
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -249,7 +294,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.E then
-		enterPlacement()
+		enterPlacement({
+			kind = "machine",
+			machineType = "generator",
+			tier = 1,
+		})
 	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		confirm(input)

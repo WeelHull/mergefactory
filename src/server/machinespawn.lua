@@ -11,6 +11,11 @@ local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 
 local machinespawn = {}
 
+local function actorPath()
+	local a = script:FindFirstAncestorOfClass("Actor")
+	return a and a:GetFullName() or "none"
+end
+
 local VALID_ROTATION = {
 	[0] = true,
 	[90] = true,
@@ -19,6 +24,10 @@ local VALID_ROTATION = {
 }
 
 local initLogged = false
+debug.log("machine", "init", "context", {
+	script = script:GetFullName(),
+	actor = actorPath(),
+})
 
 local function warn(reason, data)
 	debug.log("machine", "warn", "spawn rejected", data and table.clone(data) or { reason = reason })
@@ -241,6 +250,13 @@ function machinespawn.SpawnMachine(params)
 
 	clone.Parent = machinesFolder
 
+	debug.log("machinespawn", "decision", "registering machine", {
+		machineId = nil,
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		registry_table = tostring(MachineRegistry),
+	})
 	local machineId = MachineRegistry.RegisterMachine(clone, ownerUserId)
 	if not machineId then
 		clone:Destroy()
@@ -250,6 +266,14 @@ function machinespawn.SpawnMachine(params)
 		})
 		return false, "register_failed"
 	end
+
+	debug.log("machinespawn", "state", "registered machine", {
+		machineId = machineId,
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		registry_table = tostring(MachineRegistry),
+	})
 
 	clone:SetAttribute("machineId", machineId)
 
@@ -265,6 +289,18 @@ function machinespawn.SpawnMachine(params)
 		})
 		return false, "bind_failed"
 	end
+
+	local occupiedAfterSpawn, existingIdAfterSpawn = MachineRegistry.IsTileOccupied(islandid, gridx, gridz)
+	debug.log("machinespawn", "state", "post-register occupancy check", {
+		machineId = machineId,
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		registry_table = tostring(MachineRegistry),
+		result = occupiedAfterSpawn,
+		occupant = existingIdAfterSpawn,
+		dump = MachineRegistry.__debugDump(),
+	})
 
 	state({
 		machineid = machineId,

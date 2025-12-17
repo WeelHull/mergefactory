@@ -1,5 +1,6 @@
 local debugutil = require(script.Parent.Parent.debugutil)
 local islandcontroller = require(script.Parent.Parent.islandcontroller)
+local gridregistry = require(script.Parent.Parent.gridregistry)
 
 debugutil.log("placement", "init", "placement permission module ready")
 
@@ -68,6 +69,32 @@ function PlacementPermission.CanPlaceOnTile(player, tile)
 		gridz = gridz,
 	})
 	return true, "allowed"
+end
+
+-- Coordinate-based helper for grid placement (reuses CanPlaceOnTile logic).
+function PlacementPermission.canPlace(params)
+	if typeof(params) ~= "table" then
+		return false, "invalid_params"
+	end
+
+	local player = params.player
+	local islandid = params.islandid
+	local gridx = params.gridx
+	local gridz = params.gridz
+
+	local entry = gridregistry.getTile(islandid, gridx, gridz)
+	if not entry or not entry.part then
+		debugutil.log("placement", "decision", "deny", {
+			reason = "tile_missing",
+			userid = player and player.UserId,
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+		})
+		return false, "tile_missing"
+	end
+
+	return PlacementPermission.CanPlaceOnTile(player, entry.part)
 end
 
 return PlacementPermission

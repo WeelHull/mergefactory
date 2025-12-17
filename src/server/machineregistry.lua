@@ -1,8 +1,15 @@
 -- machineregistry (ModuleScript): runtime controller for machine models.
 -- Ensures workspace container exists and provides in-memory registry helpers.
 
+local ServerScriptService = game:GetService("ServerScriptService")
 local HttpService = game:GetService("HttpService")
 local IslandValidator = require(script.Parent.islandvalidator)
+local debug = require(ServerScriptService.Server.debugutil)
+
+local function actorPath()
+	local a = script:FindFirstAncestorOfClass("Actor")
+	return a and a:GetFullName() or "none"
+end
 
 local MachineRegistry = {}
 
@@ -11,6 +18,14 @@ local machinesById = {} -- machinesById[machineId] = Model
 local machinesByOwner = {} -- machinesByOwner[userId][machineId] = true
 local machineTileById = {} -- machineTileById[machineId] = { islandid = number, gridx = number, gridz = number }
 local tileOccupancy = {} -- tileOccupancy[islandid][gridz][gridx] = machineId
+
+MachineRegistry._occupancy = tileOccupancy
+
+debug.log("machineregistry", "init", "module loaded", {
+	script = script:GetFullName(),
+	actor = actorPath(),
+	registry_table = tostring(MachineRegistry),
+})
 
 local function readMachineId(model)
 	local attr = model:GetAttribute("machineid")
@@ -103,7 +118,6 @@ function MachineRegistry.register(model, ownerUserId)
 
 	local owner = readOwnerUserId(model, ownerUserId)
 	trackOwner(owner, machineId)
-
 	return machineId
 end
 
@@ -124,7 +138,6 @@ function MachineRegistry.unregister(machineId)
 	if bound then
 		MachineRegistry.unbindTile(machineId)
 	end
-
 	return model
 end
 
@@ -159,7 +172,20 @@ function MachineRegistry.getMachinesForOwner(ownerUserId)
 end
 
 function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
+	debug.log("machineregistry", "state", "IsTileOccupied", {
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		registry_table = tostring(MachineRegistry),
+	})
+
 	if not IslandValidator.isValidIslandId(islandid) then
+		debug.log("machineregistry", "state", "IsTileOccupied result", {
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			result = false,
+		})
 		return false, nil
 	end
 
@@ -169,38 +195,123 @@ function MachineRegistry.isTileOccupied(islandid, gridx, gridz)
 
 	local island = tileOccupancy[islandKey]
 	if not island then
+		debug.log("machineregistry", "state", "IsTileOccupied result", {
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			result = false,
+		})
 		return false, nil
 	end
 
 	local row = island[gridzKey]
 	if not row then
+		debug.log("machineregistry", "state", "IsTileOccupied result", {
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			result = false,
+		})
 		return false, nil
 	end
 
 	local id = row[gridxKey]
 	if typeof(id) ~= "string" or id == "" then
+		debug.log("machineregistry", "state", "occupancy clear", {
+			func = "isTileOccupied",
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
+			table_id = tostring(row),
+			previous = id,
+		})
 		row[gridxKey] = nil
 		if next(row) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "isTileOccupied",
+				islandid = islandid,
+				gridx = gridx,
+				gridz = gridz,
+				path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
+				table_id = tostring(island[gridzKey]),
+				previous = "<row emptied>",
+			})
 			island[gridzKey] = nil
 		end
 		if next(island) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "isTileOccupied",
+				islandid = islandid,
+				gridx = gridx,
+				gridz = gridz,
+				path = string.format("tileOccupancy[%s]", islandKey),
+				table_id = tostring(tileOccupancy[islandKey]),
+				previous = "<island emptied>",
+			})
 			tileOccupancy[islandKey] = nil
 		end
+		debug.log("machineregistry", "state", "IsTileOccupied result", {
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			result = false,
+		})
 		return false, nil
 	end
 
 	local model = MachineRegistry.get(id)
 	if not model then
+		debug.log("machineregistry", "state", "occupancy clear", {
+			func = "isTileOccupied",
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
+			table_id = tostring(row),
+			previous = id,
+		})
 		row[gridxKey] = nil
 		if next(row) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "isTileOccupied",
+				islandid = islandid,
+				gridx = gridx,
+				gridz = gridz,
+				path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
+				table_id = tostring(island[gridzKey]),
+				previous = "<row emptied>",
+			})
 			island[gridzKey] = nil
 		end
 		if next(island) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "isTileOccupied",
+				islandid = islandid,
+				gridx = gridx,
+				gridz = gridz,
+				path = string.format("tileOccupancy[%s]", islandKey),
+				table_id = tostring(tileOccupancy[islandKey]),
+				previous = "<island emptied>",
+			})
 			tileOccupancy[islandKey] = nil
 		end
+		debug.log("machineregistry", "state", "IsTileOccupied result", {
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			result = false,
+		})
 		return false, nil
 	end
 
+	debug.log("machineregistry", "state", "IsTileOccupied result", {
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		result = true,
+		machineId = id,
+	})
 	return true, id
 end
 
@@ -222,16 +333,48 @@ function MachineRegistry.bindTile(machineId, islandid, gridx, gridz)
 	local gridzKey = tostring(gridz)
 	local gridxKey = tostring(gridx)
 
-	tileOccupancy[islandKey] = tileOccupancy[islandKey] or {}
-	tileOccupancy[islandKey][gridzKey] = tileOccupancy[islandKey][gridzKey] or {}
+	if not tileOccupancy[islandKey] then
+		debug.log("machineregistry", "state", "occupancy lazy init", {
+			func = "bindTile",
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			path = string.format("tileOccupancy[%s]", islandKey),
+			table_id = tostring(tileOccupancy),
+		})
+		tileOccupancy[islandKey] = {}
+	end
+
+	if not tileOccupancy[islandKey][gridzKey] then
+		debug.log("machineregistry", "state", "occupancy lazy init", {
+			func = "bindTile",
+			islandid = islandid,
+			gridx = gridx,
+			gridz = gridz,
+			path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
+			table_id = tostring(tileOccupancy[islandKey]),
+		})
+		tileOccupancy[islandKey][gridzKey] = {}
+	end
+
+	local previous = tileOccupancy[islandKey][gridzKey][gridxKey]
 	tileOccupancy[islandKey][gridzKey][gridxKey] = machineId
+	debug.log("machineregistry", "state", "occupancy set", {
+		func = "bindTile",
+		islandid = islandid,
+		gridx = gridx,
+		gridz = gridz,
+		path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
+		table_id = tostring(tileOccupancy[islandKey][gridzKey]),
+		machineId = machineId,
+		previous = previous,
+	})
 
 	machineTileById[machineId] = {
 		islandid = islandid,
 		gridx = gridx,
 		gridz = gridz,
 	}
-
 	return true
 end
 
@@ -247,11 +390,38 @@ function MachineRegistry.unbindTile(machineId)
 
 	local island = tileOccupancy[islandKey]
 	if island and island[gridzKey] then
+		debug.log("machineregistry", "state", "occupancy clear", {
+			func = "unbindTile",
+			islandid = binding.islandid,
+			gridx = binding.gridx,
+			gridz = binding.gridz,
+			path = string.format("tileOccupancy[%s][%s][%s]", islandKey, gridzKey, gridxKey),
+			table_id = tostring(island[gridzKey]),
+			previous = island[gridzKey][gridxKey],
+		})
 		island[gridzKey][gridxKey] = nil
 		if next(island[gridzKey]) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "unbindTile",
+				islandid = binding.islandid,
+				gridx = binding.gridx,
+				gridz = binding.gridz,
+				path = string.format("tileOccupancy[%s][%s]", islandKey, gridzKey),
+				table_id = tostring(island[gridzKey]),
+				previous = "<row emptied>",
+			})
 			island[gridzKey] = nil
 		end
 		if next(island) == nil then
+			debug.log("machineregistry", "state", "occupancy clear", {
+				func = "unbindTile",
+				islandid = binding.islandid,
+				gridx = binding.gridx,
+				gridz = binding.gridz,
+				path = string.format("tileOccupancy[%s]", islandKey),
+				table_id = tostring(tileOccupancy[islandKey]),
+				previous = "<island emptied>",
+			})
 			tileOccupancy[islandKey] = nil
 		end
 	end
@@ -275,6 +445,13 @@ end
 
 function MachineRegistry.UnbindTile(machineId)
 	return MachineRegistry.unbindTile(machineId)
+end
+
+function MachineRegistry.__debugDump()
+	return {
+		registry_table = tostring(MachineRegistry),
+		occupancy = MachineRegistry._occupancy,
+	}
 end
 
 -- Expose folder helper for bootstrap.

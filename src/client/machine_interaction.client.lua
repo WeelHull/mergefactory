@@ -1,68 +1,276 @@
--- machine_interaction: client intent sender for machine selection/rotation/move.
--- No movement logic; server authoritative.
+-- machine_interaction: client-only hover/select visuals + intent dispatch.
+-- Visuals only; server remains authoritative for selection validation.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local mouse = player:GetMouse()
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
 local machineIntentEvent = remotes:WaitForChild("machine_intent")
+local debug = require(ReplicatedStorage.Shared.debugutil)
+local MachineInteraction = {}
+local MachineInteractionState = require(script.Parent.machineinteraction_state)
 
-local VALID_INTENTS = {
-	select = true,
-	rotate = true,
-	move = true,
-}
+local machinesFolder = Workspace:WaitForChild("machines")
 
-local function findMachineFromTarget(target)
+local HOVER_COLOR = Color3.fromRGB(150, 180, 220)
+local SELECT_COLOR = Color3.fromRGB(255, 210, 90)
+local HOVER_FILL_TRANSPARENCY = 0.75
+local SELECT_FILL_TRANSPARENCY = 0.35
+
+local currentHover
+local currentSelected
+local hoverHighlight
+local selectedHighlight
+local editOptions = playerGui:WaitForChild("editoptions")
+local editOptionsConnected = false
+
+local function logState(message, data)
+	debug.log("machine", "state", message, data)
+end
+
+local function handleDelete()
+	if not currentSelected then
+		return
+	end
+	debug.log("machine", "decision", "delete_pressed", {
+		machine = currentSelected:GetFullName(),
+	})
+	debug.log("machine", "warn", "delete not implemented", {})
+end
+
+local function handleMove()
+	if not currentSelected then
+		return
+	end
+	debug.log("machine", "decision", "move_pressed", {
+		machine = currentSelected:GetFullName(),
+	})
+	debug.log("machine", "warn", "move not implemented", {})
+end
+
+local function handleRotate()
+	if not currentSelected then
+		return
+	end
+	debug.log("machine", "decision", "rotate_pressed", {
+		machine = currentSelected:GetFullName(),
+	})
+	debug.log("machine", "warn", "rotate not implemented", {})
+end
+
+local function connectEditOptions()
+	if editOptionsConnected or not editOptions then
+		return
+	end
+	local deleteBtn = editOptions:FindFirstChild("delete_button")
+	local moveBtn = editOptions:FindFirstChild("move_button")
+	local rotateBtn = editOptions:FindFirstChild("rotate_button")
+
+	if deleteBtn and deleteBtn:IsA("ImageButton") then
+		deleteBtn.Activated:Connect(handleDelete)
+	end
+	if moveBtn and moveBtn:IsA("ImageButton") then
+		moveBtn.Activated:Connect(handleMove)
+	end
+	if rotateBtn and rotateBtn:IsA("ImageButton") then
+		rotateBtn.Activated:Connect(handleRotate)
+	end
+	editOptionsConnected = true
+end
+
+local function ensureHoverHighlight()
+	if hoverHighlight then
+		return hoverHighlight
+	end
+	local h = Instance.new("Highlight")
+	h.Name = "MachineHoverHighlight"
+	h.FillColor = HOVER_COLOR
+	h.FillTransparency = HOVER_FILL_TRANSPARENCY
+	h.OutlineTransparency = 0.2
+	h.DepthMode = Enum.HighlightDepthMode.Occluded
+	hoverHighlight = h
+	return h
+end
+
+local function ensureSelectedHighlight()
+	if selectedHighlight then
+		return selectedHighlight
+	end
+	local h = Instance.new("Highlight")
+	h.Name = "MachineSelectedHighlight"
+	h.FillColor = SELECT_COLOR
+	h.FillTransparency = SELECT_FILL_TRANSPARENCY
+	h.OutlineTransparency = 0.05
+	h.DepthMode = Enum.HighlightDepthMode.Occluded
+	selectedHighlight = h
+	return h
+end
+
+local function clearHover()
+	if currentHover then
+		logState("hover_clear", {
+			machine = currentHover:GetFullName(),
+		})
+	end
+	currentHover = nil
+	if hoverHighlight then
+		hoverHighlight.Adornee = nil
+		hoverHighlight.Parent = nil
+	end
+end
+
+local function clearSelected()
+	if currentSelected then
+		logState("deselect", {
+			machine = currentSelected:GetFullName(),
+		})
+	end
+	currentSelected = nil
+	if selectedHighlight then
+		selectedHighlight.Adornee = nil
+		selectedHighlight.Parent = nil
+	end
+	MachineInteractionState.SetActive(false)
+	if editOptions then
+		editOptions.Enabled = false
+		editOptions.Adornee = nil
+		debug.log("machine", "state", "editoptions_close", {})
+	end
+end
+
+local function resolveMachine(target)
 	if not target or not target:IsDescendantOf(Workspace) then
 		return nil
 	end
 
-	local current = target
-	while current and current ~= Workspace do
-		if current:IsA("Model") then
-			local gx = current:GetAttribute("gridx")
-			local gz = current:GetAttribute("gridz")
-			if typeof(gx) == "number" and typeof(gz) == "number" then
-				return current, gx, gz
-			end
+	local node = target
+	while node and node ~= Workspace do
+		if node:IsA("Model") and node.Parent == machinesFolder then
+			return node
 		end
-		current = current.Parent
+		node = node.Parent
 	end
 
 	return nil
 end
 
-local function sendIntent(intent, model, gridx, gridz, rotation)
-	if not VALID_INTENTS[intent] then
+local function resolveGrid(model)
+	if not model then
+		return nil, nil
+	end
+	return model:GetAttribute("gridx"), model:GetAttribute("gridz")
+end
+
+local function setHover(machine)
+	if machine == currentHover or machine == currentSelected then
 		return
 	end
 
-	local payload = {
-		intent = intent,
+	if machine then
+		currentHover = machine
+		local h = ensureHoverHighlight()
+		h.Adornee = machine
+		h.Parent = machine
+		logState("hover", { machine = machine:GetFullName() })
+	else
+		clearHover()
+	end
+end
+
+local function setSelected(machine)
+	if machine == currentSelected then
+		return
+	end
+
+	clearSelected()
+	currentSelected = machine
+	local h = ensureSelectedHighlight()
+	h.Adornee = machine
+	h.Parent = machine
+	MachineInteractionState.SetActive(true)
+	logState("select", { machine = machine:GetFullName() })
+	if editOptions then
+		local adornPart = machine.PrimaryPart or machine:FindFirstChildWhichIsA("BasePart")
+		if adornPart then
+			editOptions.Adornee = adornPart
+		else
+			editOptions.Adornee = nil
+		end
+		editOptions.Enabled = true
+		debug.log("machine", "state", "editoptions_open", {})
+	end
+end
+
+function MachineInteraction.IsActive()
+	return currentSelected ~= nil
+end
+
+local function sendSelect(machine)
+	local gridx, gridz = resolveGrid(machine)
+	if typeof(gridx) ~= "number" or typeof(gridz) ~= "number" then
+		return
+	end
+
+	machineIntentEvent:FireServer({
+		intent = "select",
 		gridx = gridx,
 		gridz = gridz,
-		rotation = rotation,
-	}
-
-	machineIntentEvent:FireServer(payload)
+	})
 end
 
 local function onClick()
 	local target = mouse.Target
-	local model, gridx, gridz = findMachineFromTarget(target)
-	if not model then
+	local machine = resolveMachine(target)
+	if not machine then
+		clearHover()
+		clearSelected()
+		MachineInteractionState.SetActive(false)
 		return
 	end
 
-	sendIntent("select", model, gridx, gridz)
+	setSelected(machine)
+	clearHover()
+	sendSelect(machine)
+end
+
+local function onEsc(input, processed)
+	if processed then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.Escape then
+		clearSelected()
+		clearHover()
+		MachineInteractionState.SetActive(false)
+	end
+end
+
+local function step()
+	if currentSelected and (not currentSelected.Parent or currentSelected.Parent ~= machinesFolder) then
+		clearSelected()
+	end
+
+	local target = mouse.Target
+	local machine = resolveMachine(target)
+
+	if machine and machine ~= currentSelected then
+		setHover(machine)
+	else
+		if currentHover then
+			clearHover()
+		end
+	end
 end
 
 mouse.Button1Down:Connect(onClick)
+UserInputService.InputBegan:Connect(onEsc)
+RunService.RenderStepped:Connect(step)
+connectEditOptions()
 
-return {}
+return MachineInteraction

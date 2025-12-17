@@ -1,0 +1,7 @@
+<roblox version="4">
+  <Item class="RemoteEvent">
+    <Properties>
+      <string name="Name">place_machine</string>
+    </Properties>
+  </Item>
+</roblox>

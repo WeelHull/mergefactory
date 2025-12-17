@@ -5,11 +5,15 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local debug = require(ServerScriptService.Server.debugutil)
 local IslandValidator = require(ServerScriptService.Server.islandvalidator)
-local machineregistry = require(ServerScriptService.Server.machineregistry)
 local machinerelocation = require(ServerScriptService.Server.machinerelocation)
 
 local TRACE = true
 local BOUND = false
+
+local function actorPath()
+	local a = script:FindFirstAncestorOfClass("Actor")
+	return a and a:GetFullName() or "none"
+end
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
 local machineIntentEvent = remotes:WaitForChild("machine_intent")
@@ -20,6 +24,11 @@ local VALID_ROTATION = {
 	[180] = true,
 	[270] = true,
 }
+
+debug.log("machine", "init", "context", {
+	script = script:GetFullName(),
+	actor = actorPath(),
+})
 
 local function logIntent(payload, player)
 	if TRACE then
@@ -82,6 +91,13 @@ local function handleSelect(player, payload)
 end
 
 local function onMachineIntent(player, payload)
+	local MachineRegistry = require(ServerScriptService.Server.machineregistry)
+	debug.log("machine", "init", "intent handler entered", {
+		registry_table = tostring(MachineRegistry),
+		islandid = nil,
+		gridx = payload and payload.gridx,
+		gridz = payload and payload.gridz,
+	})
 	if type(payload) ~= "table" then
 		return
 	end
@@ -136,7 +152,16 @@ local function onMachineIntent(player, payload)
 		})
 	end
 
-	local occupied, machineId = machineregistry.isTileOccupied(islandid, payload.gridx, payload.gridz)
+	debug.log("machine", "decision", "calling IsTileOccupied", {
+		registry_table = tostring(MachineRegistry),
+	})
+	local occupied, machineId = MachineRegistry.isTileOccupied(islandid, payload.gridx, payload.gridz)
+	debug.log("machine", "state", "IsTileOccupied result", {
+		result = occupied,
+		machineId = machineId,
+		registry_table = tostring(MachineRegistry),
+		dump = MachineRegistry.__debugDump(),
+	})
 	if TRACE then
 		debug.log("machine", "state", "intent trace", {
 			step = "post_occupied_A",
