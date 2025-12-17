@@ -69,18 +69,35 @@ local function connectEditOptions()
 	if editOptionsConnected or not editOptions then
 		return
 	end
-	local deleteBtn = editOptions:FindFirstChild("delete_button")
-	local moveBtn = editOptions:FindFirstChild("move_button")
-	local rotateBtn = editOptions:FindFirstChild("rotate_button")
+	local deleteBtn = editOptions:FindFirstChild("delete_button", true)
+	local moveBtn = editOptions:FindFirstChild("move_button", true)
+	local rotateBtn = editOptions:FindFirstChild("rotate_button", true)
 
-	if deleteBtn and deleteBtn:IsA("ImageButton") then
+	if deleteBtn and (deleteBtn:IsA("ImageButton") or deleteBtn:IsA("TextButton")) then
 		deleteBtn.Activated:Connect(handleDelete)
+	else
+		debug.log("machine", "warn", "editoptions_button_missing", {
+			name = "delete_button",
+			path = editOptions:GetFullName(),
+		})
 	end
-	if moveBtn and moveBtn:IsA("ImageButton") then
+
+	if moveBtn and (moveBtn:IsA("ImageButton") or moveBtn:IsA("TextButton")) then
 		moveBtn.Activated:Connect(handleMove)
+	else
+		debug.log("machine", "warn", "editoptions_button_missing", {
+			name = "move_button",
+			path = editOptions:GetFullName(),
+		})
 	end
-	if rotateBtn and rotateBtn:IsA("ImageButton") then
+
+	if rotateBtn and (rotateBtn:IsA("ImageButton") or rotateBtn:IsA("TextButton")) then
 		rotateBtn.Activated:Connect(handleRotate)
+	else
+		debug.log("machine", "warn", "editoptions_button_missing", {
+			name = "rotate_button",
+			path = editOptions:GetFullName(),
+		})
 	end
 	editOptionsConnected = true
 end
@@ -197,14 +214,28 @@ local function setSelected(machine)
 	MachineInteractionState.SetActive(true)
 	logState("select", { machine = machine:GetFullName() })
 	if editOptions then
-		local adornPart = machine.PrimaryPart or machine:FindFirstChildWhichIsA("BasePart")
+		connectEditOptions()
+		local adornPart = nil
+		if machine.PrimaryPart and machine.PrimaryPart:IsA("BasePart") then
+			adornPart = machine.PrimaryPart
+		else
+			adornPart = machine:FindFirstChildWhichIsA("BasePart", true)
+		end
+
 		if adornPart then
 			editOptions.Adornee = adornPart
+			editOptions.Enabled = true
+			debug.log("machine", "state", "editoptions_open", {
+				adornee = adornPart:GetFullName(),
+				machine = machine:GetFullName(),
+			})
 		else
+			editOptions.Enabled = false
 			editOptions.Adornee = nil
+			debug.log("machine", "warn", "editoptions_no_adornee", {
+				machine = machine:GetFullName(),
+			})
 		end
-		editOptions.Enabled = true
-		debug.log("machine", "state", "editoptions_open", {})
 	end
 end
 
