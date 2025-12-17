@@ -72,6 +72,7 @@ local function handleMove()
 	local machineType = currentSelected:GetAttribute("machineType")
 	local tier = currentSelected:GetAttribute("tier")
 	local rotation = currentSelected:GetAttribute("rotation")
+	local gridx, gridz = resolveGrid(currentSelected)
 
 	debug.log("machine", "decision", "move_pressed", {
 		machine = currentSelected:GetFullName(),
@@ -82,6 +83,13 @@ local function handleMove()
 		machineIntentEvent:FireServer({
 			intent = "move",
 			machineId = machineId,
+			gridx = gridx,
+			gridz = gridz,
+		})
+		debug.log("machine", "decision", "move_intent_sent", {
+			machineId = machineId,
+			gridx = gridx,
+			gridz = gridz,
 		})
 	else
 		debug.log("machine", "warn", "missing_machine_id", {
@@ -104,7 +112,12 @@ local function handleMove()
 	}
 
 	clearSelected()
-	PlacementModeState.RequestEnter(payload)
+	local entered = PlacementModeState.RequestEnter(payload)
+	if not entered then
+		debug.log("machine", "warn", "move_enter_failed", {
+			machineId = machineId,
+		})
+	end
 end
 
 local function handleRotate()
@@ -367,5 +380,17 @@ mouse.Button1Down:Connect(onClick)
 UserInputService.InputBegan:Connect(onEsc)
 RunService.RenderStepped:Connect(step)
 connectEditOptions()
+
+--[[ Command Bar single-use test (client):
+local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+local machines = workspace:WaitForChild("machines")
+local first = machines:FindFirstChildWhichIsA("Model")
+if first then
+    local ui = playerGui:WaitForChild("editoptions")
+    ui.Enabled = true
+    ui.Adornee = first.PrimaryPart or first:FindFirstChildWhichIsA("BasePart", true)
+    print("Select the machine, click move, pick a tile, and confirm. Verify occupancy and model pivot moved.")
+end
+]]
 
 return MachineInteraction

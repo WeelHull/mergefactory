@@ -282,8 +282,14 @@ cancel = function(input)
 	_G._placementInputConsumed.consumed = true
 	_G._placementInputConsumed.button = input and input.UserInputType or Enum.UserInputType.MouseButton1
 	stateModule.SetActive(false, "cancel")
-	if placementPayload and placementPayload.kind == "machine" then
-		debugutil.log("placement", "state", "cancel_machine", {})
+	if placementPayload then
+		if placementPayload.kind == "machine" then
+			debugutil.log("placement", "state", "cancel_machine", {})
+		elseif placementPayload.kind == "relocate" then
+			debugutil.log("placement", "state", "cancel_relocate", {
+				machineId = placementPayload.machineId,
+			})
+		end
 	end
 	destroyGhost("cancel")
 end
