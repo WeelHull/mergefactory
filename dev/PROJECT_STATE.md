@@ -152,3 +152,11 @@ System Status
 - Tile Interaction / Unlock UI — Frozen.
 - Validation / Logging Utilities — Frozen.
 - External Assets (ServerStorage/ReplicatedStorage UI/models) — Frozen (assumed stable; not sourced here).
+
+Workflow / Governance Constraints
+---------------------------------
+- ADDED: Brain Governance Obligations — The Brain does not retain project memory; reconstructs understanding only from dev/PROJECT_STATE.md, current inspection output, and human observation; must halt and request inspection if state is uncertain; build prompts require verified state or explicit “state unchanged”; must interrogate before execution and never act on assumed behavior.
+- ADDED: Ask-First / Inspect-First Workflow — Codex is queried for structure, responsibilities, and exact code snippets; human supplies runtime observations and debug logs; decisions occur only after correlating evidence.
+- ADDED: Phase Boundary Enforcement — Chats operate in explicit phases: BRAINSTORM, STATE_VERIFICATION, INTENT_CONFIRMATION, EXECUTION; Codex build prompts are valid only during EXECUTION.
+- ADDED: Inspection Requirement — Before any modification, either an inspection happens in the current chat or an explicit inspection skip is declared; silent inspection bypass is forbidden.
+- ADDED: Canonical File Control — Governance files are updated only when explicitly instructed; Codex must never update governance files implicitly; governance documentation is process guidance, not runtime logic.
