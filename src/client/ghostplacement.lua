@@ -12,15 +12,27 @@ local PlacementMode = require(script.Parent.placementmode_state)
 
 DebugUtil.log("placement", "init", "ghost placement controller ready")
 
-local PREVIEW_ROOT = ReplicatedStorage:WaitForChild("Previews")
-
 local ghostTemplate = ReplicatedStorage:WaitForChild("ghostplacement")
-local ghost = ghostTemplate:Clone()
-ghost.Parent = PREVIEW_ROOT
-DebugUtil.log("preview", "state", "created", {})
+task.defer(function()
+	for _, part in ipairs(ghostTemplate:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Transparency = 1
+			part.LocalTransparencyModifier = 1
+			part.CastShadow = false
+		end
+	end
+	local anchorPart = ghostTemplate:FindFirstChild("anchor", true)
+	if anchorPart and anchorPart:IsA("BasePart") then
+		anchorPart.Transparency = 1
+		anchorPart.LocalTransparencyModifier = 1
+		anchorPart.CastShadow = false
+		anchorPart.Anchored = true
+	end
+end)
+local ghost -- lazily created
 
-local function setGhostCollision(enabled)
-	for _, part in ipairs(ghost:GetDescendants()) do
+local function setGhostCollision(model)
+	for _, part in ipairs(model:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
 			part.CanQuery = false
@@ -29,9 +41,10 @@ local function setGhostCollision(enabled)
 	end
 end
 
-setGhostCollision(false)
-
 local function setGhostTint(color)
+	if not ghost then
+		return
+	end
 	for _, part in ipairs(ghost:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Color = color
@@ -45,20 +58,40 @@ local canPlaceFn = remotes:WaitForChild("canplaceontile")
 local lastTile
 local lastCanPlace
 local lastPlacementActive = false
-local lastHoverValid = false
 
-local function mountGhost(reason)
-	if ghost.Parent ~= Workspace then
-		ghost.Parent = Workspace
-		DebugUtil.log("ghost", "state", "mounted", { reason = reason })
+local function destroyGhost(reason)
+	if ghost then
+		ghost:Destroy()
+		ghost = nil
+		DebugUtil.log("ghost", "state", "destroyed", { reason = reason })
 	end
 end
 
-local function unmountGhost(reason)
-	if ghost.Parent ~= PREVIEW_ROOT then
-		ghost.Parent = PREVIEW_ROOT
-		DebugUtil.log("ghost", "state", "unmounted", { reason = reason })
+local function ensureGhost(reason)
+	if ghost then
+		return ghost
 	end
+	ghost = ghostTemplate:Clone()
+	setGhostCollision(ghost)
+	ghost.Parent = Workspace
+	DebugUtil.log("ghost", "state", "created", { reason = reason })
+	DebugUtil.log("ghost", "state", "active", { reason = reason })
+	return ghost
+end
+
+local function setGhostVisible(visible, reason)
+	if not ghost then
+		return
+	end
+	for _, part in ipairs(ghost:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.LocalTransparencyModifier = visible and 0 or 1
+		end
+	end
+
+	DebugUtil.log("ghost", "state", visible and "visible" or "hidden", {
+		reason = reason,
+	})
 end
 
 local function updatePermission(tile)
@@ -79,12 +112,15 @@ end
 local function onCharacterAdded()
 	lastTile = nil
 	lastCanPlace = nil
-	unmountGhost("character_added_no_hover")
+	destroyGhost("character_added_no_hover")
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
 
 local function positionGhost(tile)
+	if not ghost then
+		return
+	end
 	local primary = tile:IsA("Model") and tile.PrimaryPart or tile
 	if not primary then
 		return
@@ -144,25 +180,6 @@ local function getTileHit()
 	return inst
 end
 
-local function updateGhostMount(placementActive, tile, hoverValid, reason)
-	if not placementActive then
-		unmountGhost(reason or "placement_inactive")
-		return
-	end
-
-	if not tile then
-		unmountGhost(reason or "no_hover")
-		return
-	end
-
-	if not hoverValid then
-		unmountGhost(reason or "hover_invalid")
-		return
-	end
-
-	mountGhost(reason or "hover_valid")
-end
-
 RunService.RenderStepped:Connect(function()
 	local placementActive = PlacementMode.IsActive()
 	local placementChanged = placementActive ~= lastPlacementActive
@@ -171,18 +188,19 @@ RunService.RenderStepped:Connect(function()
 	if placementChanged and not placementActive then
 		lastTile = nil
 		lastCanPlace = nil
-		updateGhostMount(false, nil, false, "placement_exit_force")
+		destroyGhost("placement_exit_force")
 	end
 	lastPlacementActive = placementActive
 
 	if not placementActive then
+		destroyGhost("placement_inactive")
 		return
 	end
 
 	if not tile then
 		lastTile = nil
 		lastCanPlace = nil
-		updateGhostMount(placementActive, nil, false, "no_hover")
+		destroyGhost("no_hover")
 		return
 	end
 
@@ -190,9 +208,16 @@ RunService.RenderStepped:Connect(function()
 		DebugUtil.log("placement", "state", "tile_hover_change", { tile = tile:GetFullName() })
 	end
 
+	local previousCanPlace = lastCanPlace
 	local allowed = updatePermission(tile)
-	local permissionChanged = (allowed ~= lastCanPlace)
+	local permissionChanged = (allowed ~= previousCanPlace)
 
+	if not allowed then
+		destroyGhost("hover_invalid")
+		return
+	end
+
+	ensureGhost("hover_valid")
 	positionGhost(tile)
 	if allowed then
 		setGhostTint(Color3.fromRGB(80, 180, 80))
@@ -201,6 +226,6 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	if placementChanged or tile ~= lastTile or permissionChanged then
-		updateGhostMount(placementActive, tile, allowed, placementChanged and (placementActive and "placement_enter" or "placement_exit") or (permissionChanged and "permission_result" or "hover_change"))
+		setGhostVisible(true, placementChanged and "placement_enter" or (permissionChanged and "permission_result" or "hover_change"))
 	end
 end)

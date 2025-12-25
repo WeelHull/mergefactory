@@ -348,6 +348,27 @@ local function onClick()
 		return
 	end
 
+	if MachineInteractionState.IsRelocating() then
+		local sourceId = getMachineId(currentSelected)
+		local targetId = getMachineId(machine)
+		debug.log("merge", "decision", "client_merge_attempt", {
+			sourceMachineId = sourceId,
+			targetMachineId = targetId,
+		})
+
+		local gridx, gridz = resolveGrid(machine)
+		if typeof(gridx) == "number" and typeof(gridz) == "number" then
+			machineIntentEvent:FireServer({
+				intent = "select",
+				gridx = gridx,
+				gridz = gridz,
+			})
+		end
+
+		clearHover()
+		return
+	end
+
 	setSelected(machine)
 	clearHover()
 	sendSelect(machine)

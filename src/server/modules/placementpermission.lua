@@ -1,6 +1,8 @@
 local debugutil = require(script.Parent.Parent.debugutil)
 local islandcontroller = require(script.Parent.Parent.islandcontroller)
 local gridregistry = require(script.Parent.Parent.gridregistry)
+local MergeSystem = require(game.ServerScriptService.Server.mergesystem)
+local machineregistry = require(script.Parent.Parent.machineregistry)
 
 debugutil.log("placement", "init", "placement permission module ready")
 
@@ -17,7 +19,7 @@ local function findIslandIdForTile(tile)
 	return nil
 end
 
-function PlacementPermission.CanPlaceOnTile(player, tile)
+function PlacementPermission.CanPlaceOnTile(player, tile, ignoreMachineId)
 	if not tile or not tile:IsA("BasePart") then
 		debugutil.log("placement", "decision", "deny", { reason = "invalid_tile", userid = player and player.UserId })
 		return false, "invalid_tile"
@@ -63,6 +65,23 @@ function PlacementPermission.CanPlaceOnTile(player, tile)
 		return false, "tile_locked"
 	end
 
+	if ignoreMachineId then
+		local islandid = tileIsland
+		local occupied, occupantId = machineregistry.IsTileOccupied(islandid, gridx, gridz)
+		if occupied and occupantId ~= ignoreMachineId then
+			local allowed, reason = MergeSystem.CanMerge(ignoreMachineId, occupantId)
+			debugutil.log("merge", "decision", "placement_merge_check", {
+				moving = ignoreMachineId,
+				target = occupantId,
+				allowed = allowed,
+				reason = reason,
+			})
+			if allowed then
+				return true, "merge_possible"
+			end
+		end
+	end
+
 	debugutil.log("placement", "state", "allow", {
 		userid = player.UserId,
 		gridx = gridx,
@@ -81,6 +100,7 @@ function PlacementPermission.canPlace(params)
 	local islandid = params.islandid
 	local gridx = params.gridx
 	local gridz = params.gridz
+	local ignoreMachineId = params.ignoreMachineId
 
 	local entry = gridregistry.getTile(islandid, gridx, gridz)
 	if not entry or not entry.part then
@@ -94,7 +114,7 @@ function PlacementPermission.canPlace(params)
 		return false, "tile_missing"
 	end
 
-	return PlacementPermission.CanPlaceOnTile(player, entry.part)
+	return PlacementPermission.CanPlaceOnTile(player, entry.part, ignoreMachineId)
 end
 
 return PlacementPermission

@@ -6,6 +6,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local debug = require(ServerScriptService.Server.debugutil)
 local IslandValidator = require(ServerScriptService.Server.islandvalidator)
 local MachineRegistry = require(ServerScriptService.Server.machineregistry)
+local MergeSystem = require(ServerScriptService.Server.mergesystem)
 
 local TRACE = true
 local BOUND = false
@@ -65,6 +66,20 @@ local function handleSelect(player, payload)
 		gridx = payload.gridx,
 		gridz = payload.gridz,
 	})
+end
+
+local function getRelocatingMachineId(player)
+	if not player then
+		return nil
+	end
+	local ids = MachineRegistry.getIdsForOwner(player.UserId)
+	for _, id in ipairs(ids) do
+		local model = MachineRegistry.get(id)
+		if model and model:GetAttribute("state") == "Relocating" then
+			return id
+		end
+	end
+	return nil
 end
 
 local function resolveMachineForPlayer(machineId, islandid, player)
@@ -230,6 +245,35 @@ local function onMachineIntent(player, payload)
 			registry_table = tostring(MachineRegistry),
 			dump = MachineRegistry.__debugDump(),
 		})
+		local relocatingId = getRelocatingMachineId(player)
+		if relocatingId then
+			debug.log("machine", "decision", "select_blocked_relocation", {
+				machineId = relocatingId,
+				target = machineId,
+			})
+			if occupied and machineId and machineId ~= relocatingId then
+				local canMerge, reason = MergeSystem.CanMerge(relocatingId, machineId)
+				debug.log("merge", "decision", "relocate_merge_check", {
+					source = relocatingId,
+					target = machineId,
+					allowed = canMerge,
+					reason = reason,
+				})
+				if canMerge then
+					local executed, execReason = MergeSystem.ExecuteMerge(relocatingId, machineId)
+					debug.log("merge", "state", "relocate_merge_executed", {
+						result = executed and "success" or tostring(execReason),
+						machineA = relocatingId,
+						machineB = machineId,
+					})
+				else
+					debug.log("merge", "decision", "relocate_merge_denied", {
+						reason = reason,
+					})
+				end
+			end
+			return
+		end
 		if not occupied then
 			reject(player, payload, "machine_not_found")
 			return

@@ -7,6 +7,7 @@ local debug = require(ServerScriptService.Server.debugutil)
 local gridregistry = require(ServerScriptService.Server.gridregistry)
 local machineregistry = require(ServerScriptService.Server.machineregistry)
 local placementpermission = require(ServerScriptService.Server.modules.placementpermission)
+local MergeSystem = require(ServerScriptService.Server.mergesystem)
 
 local machinerelocation = {}
 
@@ -72,10 +73,7 @@ local function validate(machineId, gridx, gridz, islandid, rotation)
 		return false, "tile_locked"
 	end
 
-	local targetOccupied = machineregistry.IsTileOccupied(islandid, gridx, gridz)
-	if targetOccupied then
-		return false, "tile_occupied"
-	end
+	local targetOccupied, occupantId = machineregistry.IsTileOccupied(islandid, gridx, gridz)
 
 	local ownerUserId = model:GetAttribute("ownerUserId")
 	if typeof(ownerUserId) ~= "number" then
@@ -98,6 +96,7 @@ local function validate(machineId, gridx, gridz, islandid, rotation)
 		sourceGridZ = sourceGridZ,
 		ownerUserId = ownerUserId,
 		targetTile = targetTile,
+		targetOccupantId = occupantId,
 	}
 end
 
@@ -126,6 +125,30 @@ function machinerelocation.Relocate(machineId, gridx, gridz, islandid, rotation)
 			reason = ctx,
 		})
 		return false, ctx
+	end
+
+	if ctx.targetOccupantId and ctx.targetOccupantId ~= machineId then
+		local canMerge, mergeReason = MergeSystem.CanMerge(machineId, ctx.targetOccupantId)
+		debug.log("merge", "decision", "relocate_merge_check", {
+			moving = machineId,
+			target = ctx.targetOccupantId,
+			allowed = canMerge,
+			reason = mergeReason,
+		})
+		if canMerge then
+			local executed, execReason = MergeSystem.ExecuteMerge(machineId, ctx.targetOccupantId)
+			debug.log("merge", "state", "relocate_merge_executed", {
+				source = machineId,
+				target = ctx.targetOccupantId,
+			})
+			debug.log("machine", "state", "relocate_aborted", {
+				reason = "merge_executed",
+				machineId = machineId,
+			})
+			return executed, execReason
+		else
+			return false, "tile_occupied"
+		end
 	end
 
 	-- Step 2: unbind from source

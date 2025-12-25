@@ -26,9 +26,14 @@ local lastTile
 local lastPermission
 local lastReason
 local currentEvaluatedTile
+local lastHoverGridX
+local lastHoverGridZ
+local lastHoverIslandId
 local placementPayload = nil
 local stateModule = require(script.Parent.placementmode_state)
 local MachineInteractionState = require(script.Parent.machineinteraction_state)
+local wasPlacementActive = false
+local needPermissionRefresh = true
 
 local function log(level, message, data)
 	if not PLACEMENT_DEBUG then
@@ -45,16 +50,17 @@ local function setState(newState, reason)
 	log("state", "state change", { state = state, reason = reason })
 end
 
-local function destroyGhost(reason)
+local function destroyGhost(reason, logExit)
 	if ghost then
 		ghost:Destroy()
 		ghost = nil
 	end
 	lastTile = nil
 	lastPermission = nil
-	placementPayload = nil
-	log("state", "exit", { reason = reason or "destroy" })
-	setState("Idle")
+	if logExit ~= false then
+		log("state", "exit", { reason = reason or "destroy" })
+		-- instruction_clear stays coupled to exit log via placement_instruction_controller observer
+	end
 end
 
 local function ensureGhost()
@@ -185,28 +191,82 @@ local function onRender()
 		return
 	end
 
+	local placementActive = stateModule.IsActive()
+	local exiting = (not placementActive) and wasPlacementActive
+	local entering = placementActive and (not wasPlacementActive)
+	wasPlacementActive = placementActive
+
+	if exiting then
+		destroyGhost("placement_inactive")
+		setState("Idle", "placement_inactive")
+		return
+	end
+
+	if not placementActive then
+		return
+	end
+
 	local tile = raycastToTile()
+
 	if not tile then
-		setGhostVisible(false)
+		destroyGhost("no_tile", false)
 		lastTile = nil
 		lastPermission = nil
 		lastReason = nil
 		currentEvaluatedTile = nil
+		lastHoverGridX = nil
+		lastHoverGridZ = nil
+		lastHoverIslandId = nil
+		needPermissionRefresh = true
 		setState("Placing", "no_tile")
 		return
 	end
 
-	if tile ~= lastTile then
+	local gridx = tile:GetAttribute("gridx")
+	local gridz = tile:GetAttribute("gridz")
+	local islandid = player:GetAttribute("islandid")
+
+	if gridx == lastHoverGridX and gridz == lastHoverGridZ and islandid == lastHoverIslandId then
+		return
+	end
+
+	local tileChanged = true
+
+	if tileChanged then
 		log("state", "tile_hover_change", { tile = tile:GetFullName() })
 		lastTile = tile
+		lastHoverGridX = gridx
+		lastHoverGridZ = gridz
+		lastHoverIslandId = islandid
 		currentEvaluatedTile = nil
 		lastPermission = nil
 		lastReason = nil
+		needPermissionRefresh = true
 	end
 
-	snapGhostToTile(tile)
-	local allowed = updatePermission(tile)
-	setGhostVisible(true, allowed)
+	local previousCanPlace = lastPermission
+	local allowed
+	local permissionChanged = false
+	if needPermissionRefresh or tileChanged then
+		allowed = updatePermission(tile)
+		permissionChanged = allowed ~= previousCanPlace
+		needPermissionRefresh = false
+	else
+		allowed = lastPermission
+	end
+
+	if not allowed then
+		if permissionChanged or ghost then
+			destroyGhost("hover_invalid", false)
+		end
+		return
+	end
+
+	if tileChanged or permissionChanged or not ghost then
+		ensureGhost(tileChanged and "tile_change" or (permissionChanged and "permission_changed" or "first_valid_hover"))
+		snapGhostToTile(tile)
+		setGhostVisible(true, allowed)
+	end
 end
 
 local cancel
@@ -304,7 +364,6 @@ local function enterPlacement(payload)
 		cancel()
 	end
 	placementPayload = payload or { kind = "tile" }
-	ensureGhost()
 	stateModule.SetActive(true, "enter")
 	setState("Placing", "enter")
 	if placementPayload.kind == "machine" then
