@@ -17,6 +17,10 @@ local debug = require(ReplicatedStorage.Shared.debugutil)
 local MachineInteraction = {}
 local MachineInteractionState = require(script.Parent.machineinteraction_state)
 local PlacementModeState = require(script.Parent.placementmode_state)
+local Inventory = require(script.Parent.inventory)
+local PlayerUI = require(script.Parent.playerui_controller)
+local Inventory = require(script.Parent.inventory)
+local PlayerUI = require(script.Parent.playerui_controller)
 
 local machinesFolder = Workspace:WaitForChild("machines")
 
@@ -55,6 +59,8 @@ local function handleDelete()
 		return
 	end
 	local machineId = getMachineId(currentSelected)
+	local machineType = currentSelected:GetAttribute("machineType")
+	local tier = currentSelected:GetAttribute("tier")
 	debug.log("machine", "decision", "delete_pressed", {
 		machine = currentSelected:GetFullName(),
 		machineId = machineId,
@@ -69,6 +75,15 @@ local function handleDelete()
 		intent = "delete",
 		machineId = machineId,
 	})
+	if machineType and tier then
+		Inventory.Add(machineType, tier, 1)
+		PlayerUI.SetTierAmount(tier, Inventory.GetCount(machineType, tier))
+		debug.log("inventory", "state", "returned_to_inventory", {
+			machineType = machineType,
+			tier = tier,
+			reason = "delete_button",
+		})
+	end
 end
 
 local function handleMove()
@@ -374,7 +389,7 @@ local function onClick()
 	sendSelect(machine)
 end
 
-local function onEsc(input, processed)
+local function onInput(input, processed)
 	if processed then
 		return
 	end
@@ -382,6 +397,15 @@ local function onEsc(input, processed)
 		clearSelected()
 		clearHover()
 		MachineInteractionState.SetActive(false)
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.R then
+		if PlacementModeState.IsActive() then
+			return
+		end
+		if currentSelected then
+			handleRotate()
+		end
 	end
 end
 
@@ -403,7 +427,7 @@ local function step()
 end
 
 mouse.Button1Down:Connect(onClick)
-UserInputService.InputBegan:Connect(onEsc)
+UserInputService.InputBegan:Connect(onInput)
 RunService.RenderStepped:Connect(step)
 connectEditOptions()
 

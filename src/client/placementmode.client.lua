@@ -12,6 +12,8 @@ local camera = workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local Feedback = require(script.Parent.placement_feedback)
 local Selection = require(script.Parent.placement_selection)
+local Inventory = require(script.Parent.inventory)
+local PurchasePrompt = require(script.Parent.purchase_prompt)
 local PlayerUI = require(script.Parent.playerui_controller)
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
@@ -34,6 +36,7 @@ local currentEvaluatedTile
 local lastHoverGridX
 local lastHoverGridZ
 local lastHoverIslandId
+local gridFolder
 local stateModule = require(script.Parent.placementmode_state)
 local MachineInteractionState = require(script.Parent.machineinteraction_state)
 local wasPlacementActive = false
@@ -98,7 +101,7 @@ ensureGhost = function()
 		return ghost
 	end
 	local previewName
-	if placementPayload and placementPayload.kind == "machine" then
+	if placementPayload and (placementPayload.kind == "machine" or placementPayload.kind == "relocate") then
 		previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
 		local preview = previewsFolder:FindFirstChild(previewName)
 		if preview and preview:IsA("Model") then
@@ -215,6 +218,16 @@ local function setGhostVisible(visible, allowed)
 end
 
 local function raycastToTile()
+	local islandId = player and player:GetAttribute("islandid")
+	if not islandId then
+		return nil
+	end
+	local islands = workspace:FindFirstChild("islands")
+	local islandModel = islands and islands:FindFirstChild("player_" .. tostring(islandId))
+	gridFolder = islandModel and islandModel:FindFirstChild("grid") or gridFolder
+	if not gridFolder then
+		return nil
+	end
 	if not camera then
 		camera = workspace.CurrentCamera
 		if not camera then
@@ -224,8 +237,8 @@ local function raycastToTile()
 	local mousePos = UserInputService:GetMouseLocation()
 	local unitRay = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
 	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { ghost }
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { gridFolder }
 	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, params)
 	if not result then
 		return nil
@@ -237,13 +250,6 @@ local function raycastToTile()
 	if not hit.Name:match("^tile_z%d+_x%d+$") then
 		return nil
 	end
-	local islandId = player:GetAttribute("islandid")
-	if not islandId then
-		return nil
-	end
-	local gridFolder = workspace:FindFirstChild("islands")
-	gridFolder = gridFolder and gridFolder:FindFirstChild("player_" .. tostring(islandId))
-	gridFolder = gridFolder and gridFolder:FindFirstChild("grid")
 	if hit.Parent ~= gridFolder then
 		return nil
 	end
@@ -539,6 +545,15 @@ local function confirm(input)
 	end
 	log("decision", "confirm")
 	if placementPayload and placementPayload.kind == "machine" and lastTile then
+		local hasInventory = Inventory.Consume(placementPayload.machineType, placementPayload.tier, 1)
+		if not hasInventory then
+			debugutil.log("placement", "warn", "no_inventory", {
+				machineType = placementPayload.machineType,
+				tier = placementPayload.tier,
+			})
+			return
+		end
+		PlayerUI.SetTierAmount(placementPayload.tier, Inventory.GetCount(placementPayload.machineType, placementPayload.tier))
 		local gx = lastTile:GetAttribute("gridx")
 		local gz = lastTile:GetAttribute("gridz")
 		local current = Selection.GetCurrent()
@@ -674,6 +689,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
 		return
 	end
+	if input.KeyCode == Enum.KeyCode.R then
+		if stateModule.IsActive() then
+			rotatePlacement(90)
+		end
+	end
 	if input.KeyCode == Enum.KeyCode.E then
 		if PlayerUI.IsBuildMenuVisible() or stateModule.IsActive() then
 			PlayerUI.ShowMenuButtons()
@@ -683,6 +703,24 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		local cur = Selection.GetCurrent()
 		if cur then
 			PlayerUI.ShowBuildMenu()
+			Inventory.EnsureStarter()
+			if not Inventory.Has(cur.machineType, cur.tier) then
+				local price = require(ReplicatedStorage.Shared.economy_config).GetMachinePrice(cur.machineType, cur.tier)
+				PurchasePrompt.Prompt(cur.machineType, cur.tier, price, function(result)
+					if result and result.accepted then
+						Inventory.Add(cur.machineType, cur.tier, 1)
+						PlayerUI.SetTierAmount(cur.tier, Inventory.GetCount(cur.machineType, cur.tier))
+						enterPlacement({
+							kind = "machine",
+							machineType = cur.machineType,
+							tier = cur.tier,
+						})
+					else
+						debugutil.log("ui", "warn", "purchase_declined", { trigger = "key_E", tier = cur.tier })
+					end
+				end)
+				return
+			end
 			enterPlacement({
 				kind = "machine",
 				machineType = cur.machineType,

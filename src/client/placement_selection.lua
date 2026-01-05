@@ -6,6 +6,7 @@ local Selection = {}
 
 local items = {}
 local index = 1
+local changedListeners = {}
 
 function Selection.Init()
 	table.clear(items)
@@ -31,12 +32,20 @@ function Selection.GetCount()
 	return #items
 end
 
-local function logSelection()
+local function fireChanged()
 	local current = Selection.GetCurrent()
 	debugutil.log("placement", "state", "selection changed", {
 		index = index,
 		tier = current and current.tier,
 	})
+	for _, fn in pairs(changedListeners) do
+		if typeof(fn) == "function" then
+			fn()
+		end
+	end
+	if typeof(Selection.onChanged) == "function" then
+		Selection.onChanged()
+	end
 end
 
 function Selection.Next()
@@ -47,7 +56,7 @@ function Selection.Next()
 	if index > #items then
 		index = 1
 	end
-	logSelection()
+	fireChanged()
 	return Selection.GetCurrent()
 end
 
@@ -59,8 +68,31 @@ function Selection.Prev()
 	if index < 1 then
 		index = #items
 	end
-	logSelection()
+	fireChanged()
 	return Selection.GetCurrent()
+end
+
+function Selection.SetTier(tier)
+	if #items == 0 then
+		return Selection.GetCurrent()
+	end
+	local clamped = math.clamp(tier, 1, #items)
+	if clamped == index then
+		return Selection.GetCurrent()
+	end
+	index = clamped
+	fireChanged()
+	return Selection.GetCurrent()
+end
+
+function Selection.ConnectChanged(fn)
+	local id = tostring(tick()) .. "_" .. tostring(math.random())
+	changedListeners[id] = fn
+	return {
+		Disconnect = function()
+			changedListeners[id] = nil
+		end,
+	}
 end
 
 return Selection

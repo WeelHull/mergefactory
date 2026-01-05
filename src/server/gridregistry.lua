@@ -8,6 +8,8 @@ local registry = {} -- registry[islandid][gridz][gridx] = { part = BasePart, unl
 local LOCKED_COLOR = Color3.fromRGB(180, 60, 60)
 local UNLOCKED_COLOR = Color3.fromRGB(80, 180, 80)
 local VERBOSE = false
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local function applyVisual(part, unlocked)
 	if not part or not part:IsA("BasePart") then
@@ -151,10 +153,13 @@ local function buildRegistry()
 			if tile:IsA("BasePart") then
 				local entry = readTileAttributes(tile)
 				if entry then
+					local price = EconomyConfig.GetTilePrice(entry.gridx, entry.gridz)
+					tile:SetAttribute("price", price)
 					registry[islandKey][entry.gridz] = registry[islandKey][entry.gridz] or {}
 					registry[islandKey][entry.gridz][entry.gridx] = {
 						part = entry.part,
 						unlocked = entry.unlocked,
+						price = price,
 					}
 					added += 1
 				end

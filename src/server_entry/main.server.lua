@@ -6,6 +6,8 @@ local islandcontroller = require(game.ServerScriptService.Server.islandcontrolle
 local unlockcontroller = require(game.ServerScriptService.Server.unlockcontroller)
 local PlacementPermission = require(game.ServerScriptService.Server.modules.placementpermission)
 local MachineRegistry = require(game.ServerScriptService.Server.machineregistry)
+local Economy = require(game.ServerScriptService.Server.economy)
+local gridregistry = require(game.ServerScriptService.Server.gridregistry)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
@@ -105,6 +107,8 @@ local function ensureStartUnlocked(player)
 	if player.Character then
 		onCharacterAdded(player.Character)
 	end
+
+	Economy.Start(player)
 end
 
 Players.PlayerAdded:Connect(ensureStartUnlocked)
@@ -114,6 +118,12 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local remotes = sharedFolder:WaitForChild("remotes")
 local tileunlockEvent = remotes:WaitForChild("tileunlock")
 local canPlaceFunction = remotes:WaitForChild("canplaceontile")
+local spendCashFn = remotes:FindFirstChild("spend_cash") or Instance.new("RemoteFunction")
+spendCashFn.Name = "spend_cash"
+spendCashFn.Parent = remotes
+spendCashFn.OnServerInvoke = function(player, amount)
+	return Economy.Spend(player, amount)
+end
 
 local function onTileUnlock(player, gridx, gridz)
 	debugutil.log("interaction", "decision", "tile unlock intent", {
@@ -133,8 +143,41 @@ local function onTileUnlock(player, gridx, gridz)
 		return
 	end
 
+	local tileEntry = gridregistry.getTile(player:GetAttribute("islandid"), gx, gz)
+	local price = tileEntry and tileEntry.part and tileEntry.part:GetAttribute("price") or 0
+	if price > 0 and Economy.GetCash(player) < price then
+		debugutil.log("interaction", "warn", "tile unlock blocked", {
+			userid = player.UserId,
+			gridx = gx,
+			gridz = gz,
+			reason = "insufficient_funds",
+			price = price,
+			cash = Economy.GetCash(player),
+		})
+		tileunlockEvent:FireClient(player, {
+			success = false,
+			gridx = gx,
+			gridz = gz,
+			reason = "insufficient_funds",
+			price = price,
+		})
+		return
+	end
+
 	local success = unlockcontroller.unlockTile(player, gx, gz)
 	if success then
+		if price > 0 then
+			local spent = Economy.Spend(player, price)
+			if not spent then
+				debugutil.log("interaction", "warn", "tile unlock spend failed post-unlock", {
+					userid = player.UserId,
+					gridx = gx,
+					gridz = gz,
+					price = price,
+					cash = Economy.GetCash(player),
+				})
+			end
+		end
 		debugutil.log("interaction", "state", "tile unlock success", {
 			userid = player.UserId,
 			gridx = gx,
