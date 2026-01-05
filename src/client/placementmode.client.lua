@@ -12,6 +12,7 @@ local camera = workspace.CurrentCamera
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local Feedback = require(script.Parent.placement_feedback)
 local Selection = require(script.Parent.placement_selection)
+local PlayerUI = require(script.Parent.playerui_controller)
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
 local canPlaceFn = remotes:WaitForChild("canplaceontile")
@@ -41,6 +42,7 @@ local hoverDirty = false
 local wheelBound = false
 local savedMinZoom
 local savedMaxZoom
+local currentRotation = 0
 
 local ensureGhost
 local snapGhostToTile
@@ -85,6 +87,7 @@ local function destroyGhost(reason, logExit)
 		ghost:Destroy()
 		ghost = nil
 	end
+	PlayerUI.SetRotationAdornee(nil)
 	if logExit ~= false then
 		log("state", "exit", { reason = reason or "destroy" })
 	end
@@ -190,10 +193,13 @@ snapGhostToTile = function(tile)
 	if not gp or not tp then
 		return
 	end
+	PlayerUI.SetRotationAdornee(tp)
 	local y = tp.Position.Y + tp.Size.Y * 0.5 + gp.Size.Y * 0.5
-	local target = CFrame.new(tp.Position.X, y, tp.Position.Z)
-	local delta = target.Position - gp.Position
-	ghost:PivotTo(ghost:GetPivot() + delta)
+	local rotation = placementPayload and placementPayload.rotation or currentRotation or 0
+	local targetPrimary = CFrame.new(tp.Position.X, y, tp.Position.Z) * CFrame.Angles(0, math.rad(rotation), 0)
+	local pivotToPrimary = ghost:GetPivot():ToObjectSpace(gp.CFrame)
+	local targetPivot = targetPrimary * pivotToPrimary:Inverse()
+	ghost:PivotTo(targetPivot)
 end
 
 local function setGhostVisible(visible, allowed)
@@ -335,6 +341,7 @@ local function exitPlacement(reason)
 	if wheelBound then
 		unbindWheel()
 	end
+	PlayerUI.HideRotationOption()
 	if player and savedMinZoom and savedMaxZoom then
 		player.CameraMinZoomDistance = savedMinZoom
 		player.CameraMaxZoomDistance = savedMaxZoom
@@ -380,6 +387,30 @@ Selection.onChanged = function()
 	end
 end
 
+local function rotatePlacement(delta)
+	if not stateModule.IsActive() then
+		return false
+	end
+	if not placementPayload or (placementPayload.kind ~= "machine" and placementPayload.kind ~= "relocate") then
+		return false
+	end
+	local step = delta or 90
+	currentRotation = ((currentRotation + step) % 360 + 360) % 360
+	placementPayload.rotation = currentRotation
+	if not ghost then
+		ensureGhost()
+	end
+	if ghost and lastTile then
+		snapGhostToTile(lastTile)
+	end
+	debugutil.log("placement", "state", "rotate", {
+		rotation = currentRotation,
+		step = step,
+		tile = lastTile and lastTile:GetFullName() or "nil",
+	})
+	return true
+end
+
 local function onRender()
 	if state == "Idle" or state == "Cancelled" then
 		return
@@ -393,6 +424,7 @@ local function onRender()
 	if exiting then
 		destroyGhost("placement_inactive")
 		clearHoverCache()
+		PlayerUI.HideRotationOption()
 		setState("Idle", "placement_inactive")
 		return
 	end
@@ -530,7 +562,7 @@ local function confirm(input)
 			tier = placementPayload.tier,
 			gridx = gx,
 			gridz = gz,
-			rotation = 0,
+			rotation = placementPayload and placementPayload.rotation or currentRotation or 0,
 		})
 	elseif placementPayload and placementPayload.kind == "relocate" and lastTile then
 		local gx = lastTile:GetAttribute("gridx")
@@ -547,7 +579,7 @@ local function confirm(input)
 			tier = placementPayload.tier,
 			gridx = gx,
 			gridz = gz,
-			rotation = placementPayload.rotation or 0,
+			rotation = placementPayload.rotation or currentRotation or 0,
 			ignoreMachineId = placementPayload.ignoreMachineId,
 		})
 		MachineInteractionState.SetRelocating(false)
@@ -577,11 +609,20 @@ cancel = function(input)
 	exitPlacement("cancel")
 end
 
+stateModule.SetCancelCallback(cancel)
+
 local function enterPlacement(payload)
 	if state ~= "Idle" then
 		cancel()
 	end
 	placementPayload = payload or { kind = "tile" }
+	currentRotation = placementPayload.rotation or 0
+	placementPayload.rotation = currentRotation
+	if placementPayload.kind == "machine" or placementPayload.kind == "relocate" then
+		PlayerUI.ShowRotationOption()
+	else
+		PlayerUI.HideRotationOption()
+	end
 	clearHoverCache()
 	stateModule.SetActive(true, "enter")
 	setState("Placing", "enter")
@@ -627,14 +668,21 @@ local function enterPlacement(payload)
 	end
 end
 stateModule.SetEnterCallback(enterPlacement)
+stateModule.SetRotateCallback(rotatePlacement)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.E then
+		if PlayerUI.IsBuildMenuVisible() or stateModule.IsActive() then
+			PlayerUI.ShowMenuButtons()
+			cancel(input)
+			return
+		end
 		local cur = Selection.GetCurrent()
 		if cur then
+			PlayerUI.ShowBuildMenu()
 			enterPlacement({
 				kind = "machine",
 				machineType = cur.machineType,
@@ -645,7 +693,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		confirm(input)
 	end
-	if input.KeyCode == Enum.KeyCode.ButtonB or input.KeyCode == Enum.KeyCode.Escape or input.UserInputType == Enum.UserInputType.MouseButton2 then
+	if input.KeyCode == Enum.KeyCode.ButtonB or input.KeyCode == Enum.KeyCode.Escape then
 		cancel(input)
 	end
 end)
