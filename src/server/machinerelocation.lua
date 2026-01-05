@@ -85,7 +85,7 @@ local function validate(machineId, gridx, gridz, islandid, rotation)
 		return false, "owner_not_present"
 	end
 
-	local allowed, reason = placementpermission.CanPlaceOnTile(player, targetTile.part)
+	local allowed, reason = placementpermission.CanPlaceOnTile(player, targetTile.part, machineId)
 	if not allowed then
 		return false, "placement_denied_" .. tostring(reason or "unknown")
 	end

@@ -57,6 +57,7 @@ local function handleRelocate(player, payload, islandid)
 		gridz = payload.gridz,
 		machineType = payload.machineType,
 		tier = payload.tier,
+		ignoreMachineId = machineId,
 	})
 	if not allowed then
 		debugutil.log("machine", "warn", "relocate_rejected", {

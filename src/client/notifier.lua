@@ -33,22 +33,39 @@ local function ensureGui()
 	label.Parent = gui
 end
 
-function Notifier.Insufficient()
+local function show(text, duration, color)
 	ensureGui()
 	if not label then
 		return
 	end
-	label.Text = "Insufficient Funds!!"
+	label.Text = text or ""
+	if color then
+		label.TextColor3 = color
+	else
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
 	label.Visible = true
 	if hideConnection then
 		hideConnection:Disconnect()
 	end
 	hideConnection = nil
-	task.delay(2, function()
+	task.delay(duration or 2, function()
 		if label then
 			label.Visible = false
 		end
 	end)
+end
+
+function Notifier.Insufficient()
+	show("Insufficient Funds!!", 2, Color3.fromRGB(255, 80, 80))
+end
+
+function Notifier.Warn(text, duration)
+	show(text, duration, Color3.fromRGB(255, 80, 80))
+end
+
+function Notifier.Show(text, duration)
+	show(text, duration, Color3.fromRGB(255, 255, 255))
 end
 
 return Notifier

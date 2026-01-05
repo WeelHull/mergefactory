@@ -3,6 +3,7 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
+local Notifier = require(script.Parent.notifier)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -11,6 +12,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local feedbackGui: ScreenGui? = nil
 local label: TextLabel? = nil
 local uiReady = false
+local SHOW_FEEDBACK = false -- keep bottom placement_feedback hidden; use Notifier instead
 
 local function bindUi(gui)
 	local lbl = gui:FindFirstChild("TextLabel")
@@ -46,6 +48,7 @@ end
 local currentText = ""
 local lastDeniedReason = nil
 local terminalLocked = false
+local mergePossible = false
 local setPlaceholder -- forward declaration
 
 local function logSet(placeholder, text)
@@ -67,6 +70,9 @@ local function show(text, placeholder)
 		currentText = text
 		logSet(placeholder, text)
 	end
+	if not SHOW_FEEDBACK or not label or not feedbackGui then
+		return
+	end
 	label.Text = text
 	feedbackGui.Enabled = true
 	TweenService:Create(label, TweenInfo.new(0.15), { TextTransparency = 0, TextStrokeTransparency = 0.3 }):Play()
@@ -79,6 +85,9 @@ local function fadeOut(reason, duration)
 	terminalLocked = false
 	currentText = ""
 	logClear(reason)
+	if not SHOW_FEEDBACK or not label or not feedbackGui then
+		return
+	end
 	TweenService:Create(label, TweenInfo.new(duration or 0.2), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 	task.delay(duration or 0.2, function()
 		if currentText == "" then
@@ -114,11 +123,13 @@ debugutil.log = function(system, level, message, data)
 
 	if level == "state" and message == "enter" then
 		lastDeniedReason = nil
+		mergePossible = false
 		if not terminalLocked then
 			setPlaceholder("placement_active")
 		end
 	elseif level == "state" and message == "exit" then
 		lastDeniedReason = nil
+		mergePossible = false
 		-- exit when no terminal is active: clear immediately
 		if not terminalLocked then
 			fadeOut("placement_exit", 0.1)
@@ -129,8 +140,10 @@ debugutil.log = function(system, level, message, data)
 		setPlaceholder("confirm")
 	elseif level == "decision" and (message == "deny" or message == "canPlace") and data and data.allowed == false then
 		lastDeniedReason = data.reason
+		mergePossible = false
 	elseif level == "decision" and (message == "deny" or message == "canPlace") and data and data.allowed == true then
 		lastDeniedReason = nil
+		mergePossible = data.reason == "merge_possible"
 	elseif level == "state" and message == "invalid placement feedback shown" then
 		if lastDeniedReason == "tile_locked" then
 			setPlaceholder("invalid_locked")
@@ -153,18 +166,25 @@ function setPlaceholder(placeholder)
 	end
 
 	if placeholder == "placement_active" then
+		Notifier.Show("Place your item", 2)
 		show("Place your item", placeholder)
 	elseif placeholder == "invalid_generic" then
+		Notifier.Warn("You can’t place it here", 2)
 		morph("You can’t place it here", 1.0, placeholder)
 		terminalLocked = true
 	elseif placeholder == "invalid_locked" then
+		Notifier.Warn("Tile locked", 2)
 		morph("Tile locked", 1.2, placeholder)
 		terminalLocked = true
 	elseif placeholder == "confirm" then
-		morph("Placed", 0.8, placeholder)
+		local text = mergePossible and "Merged" or "Placed"
+		Notifier.Show(text, 1.5)
+		morph(text, 0.8, placeholder)
+		mergePossible = false
 		terminalLocked = true
 	elseif placeholder == "cancel" then
 		if not terminalLocked then
+			Notifier.Show("Placement cancelled", 1.5)
 			morph("Placement cancelled", 1.0, placeholder)
 			terminalLocked = true
 		end

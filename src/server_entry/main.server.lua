@@ -207,19 +207,21 @@ end
 tileunlockEvent.OnServerEvent:Connect(onTileUnlock)
 
 canPlaceFunction.OnServerInvoke = function(player, tile, ignoreMachineId)
-	local allowed, reason = PlacementPermission.CanPlaceOnTile(player, tile)
-	if allowed and tile then
+	local allowed, reason = PlacementPermission.CanPlaceOnTile(player, tile, ignoreMachineId)
+	if tile then
 		local gridx = tile:GetAttribute("gridx")
 		local gridz = tile:GetAttribute("gridz")
 		local islandid = player:GetAttribute("islandid")
 		if typeof(gridx) == "number" and typeof(gridz) == "number" and typeof(islandid) == "number" then
 			local occupied, occupantId = MachineRegistry.IsTileOccupied(islandid, gridx, gridz)
-			if occupied and occupantId ~= ignoreMachineId then
-				allowed = false
-				reason = "tile_occupied"
-			elseif occupied and occupantId == ignoreMachineId then
-				allowed = true
-				reason = "self_tile"
+			if occupied then
+				if occupantId == ignoreMachineId then
+					allowed = true
+					reason = "self_tile"
+				elseif reason ~= "merge_possible" then
+					allowed = false
+					reason = "tile_occupied"
+				end
 			end
 		end
 	end
