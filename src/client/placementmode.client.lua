@@ -24,6 +24,7 @@ local previewsFolder = ReplicatedStorage:WaitForChild("previews")
 _G._placementInputConsumed = _G._placementInputConsumed or { consumed = false, button = nil }
 
 local state = "Idle"
+local placementPayload = nil
 local ghost
 local lastTile
 local lastPermission
@@ -32,18 +33,20 @@ local currentEvaluatedTile
 local lastHoverGridX
 local lastHoverGridZ
 local lastHoverIslandId
-local placementPayload = nil
 local stateModule = require(script.Parent.placementmode_state)
 local MachineInteractionState = require(script.Parent.machineinteraction_state)
 local wasPlacementActive = false
 local needPermissionRefresh = true
+local hoverDirty = false
 local wheelBound = false
 local savedMinZoom
 local savedMaxZoom
-local replaceGhostPreview = nil
+
 local ensureGhost
 local snapGhostToTile
-local lastTileInvalidated = false
+local replaceGhostPreview
+local cancel
+
 Selection.Init()
 
 local function log(level, message, data)
@@ -61,167 +64,61 @@ local function setState(newState, reason)
 	log("state", "state change", { state = state, reason = reason })
 end
 
+local function clearHoverCache()
+	lastTile = nil
+	lastPermission = nil
+	lastReason = nil
+	currentEvaluatedTile = nil
+	lastHoverGridX = nil
+	lastHoverGridZ = nil
+	lastHoverIslandId = nil
+	needPermissionRefresh = true
+	hoverDirty = true
+end
+
 local function destroyGhost(reason, logExit)
 	if ghost then
 		debugutil.log("placement", "state", "ghost_destroy", {
 			reason = reason,
 			name = ghost.Name,
 		})
-	end
-	if ghost then
 		ghost:Destroy()
 		ghost = nil
 	end
-	lastTile = nil
-	lastPermission = nil
 	if logExit ~= false then
 		log("state", "exit", { reason = reason or "destroy" })
-		-- instruction_clear stays coupled to exit log via placement_instruction_controller observer
 	end
 end
 
-local function onWheelAction(actionName, inputState, inputObject)
-	if inputObject.UserInputType ~= Enum.UserInputType.MouseWheel then
-		return Enum.ContextActionResult.Pass
-	end
-	if inputObject.Position.Z > 0 then
-		Selection.Next()
-	elseif inputObject.Position.Z < 0 then
-		Selection.Prev()
-	end
-	if placementPayload and placementPayload.kind == "machine" then
-		local currentSel = Selection.GetCurrent()
-		if currentSel then
-			placementPayload.tier = currentSel.tier
-			debugutil.log("placement", "state", "payload_sync", {
-				tier = currentSel.tier,
-			})
-		end
-	end
-	if stateModule.IsActive() and placementPayload and placementPayload.kind == "machine" then
-		local current = Selection.GetCurrent()
-		if current then
-			placementPayload.tier = current.tier
-			debugutil.log("placement", "state", "wheel_debug", {
-				sel_tier = current.tier,
-				sel_index = Selection.GetIndex(),
-				payload_tier = placementPayload.tier,
-				payload_type = placementPayload.machineType,
-				ghost = ghost ~= nil,
-				state = state,
-			})
-			lastTileInvalidated = true -- invalidate hover cache so onRender rebuilds on next frame
-		end
-	end
-	if stateModule.IsActive() then
-		local current = Selection.GetCurrent()
-		debugutil.log("placement", "state", "wheel_action", {
-			delta = inputObject.Position.Z,
-			index = Selection.GetIndex(),
-			tier = current and current.tier,
-			payload_tier = placementPayload and placementPayload.tier,
-		})
-	end
-	return Enum.ContextActionResult.Sink
-end
-
-local function bindWheel()
-	if wheelBound then
-		return
-	end
-	ContextActionService:BindActionAtPriority(WHEEL_ACTION, onWheelAction, false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseWheel)
-	wheelBound = true
-	debugutil.log("placement", "state", "wheel captured", {})
-end
-
-local function unbindWheel()
-	if not wheelBound then
-		return
-	end
-	ContextActionService:UnbindAction(WHEEL_ACTION)
-	wheelBound = false
-	debugutil.log("placement", "state", "wheel released", {})
-end
-
-local function exitPlacement(reason)
-	debugutil.log("placement", "state", "exit_begin", {
-		reason = reason,
-	})
-	if wheelBound then
-		unbindWheel()
-	end
-	if player and savedMinZoom and savedMaxZoom then
-		player.CameraMinZoomDistance = savedMinZoom
-		player.CameraMaxZoomDistance = savedMaxZoom
-		savedMinZoom = nil
-		savedMaxZoom = nil
-		debugutil.log("placement", "state", "camera zoom restored", {})
-	end
-	destroyGhost("exit")
-	placementPayload = nil
-	stateModule.SetActive(false, reason)
-	setState("Idle", reason or "exit")
-	debugutil.log("placement", "state", "exit_end", {
-		reason = reason,
-	})
-end
-
-Selection.onChanged = function()
-	if not stateModule.IsActive() then
-		return
-	end
-	if not placementPayload or placementPayload.kind ~= "machine" then
-		return
-	end
-	local current = Selection.GetCurrent()
-	if not current then
-		return
-	end
-	placementPayload.tier = current.tier
-	if stateModule.IsActive() and placementPayload.kind == "machine" then
-		if not ghost then
-			ensureGhost()
-		end
-		if lastTile and ghost then
-			replaceGhostPreview(placementPayload.machineType, placementPayload.tier)
-			snapGhostToTile(lastTile)
-			debugutil.log("placement", "state", "ghost_rebuilt", {
-				reason = "selection_changed",
-				tier = current.tier,
-			})
-		else
-			debugutil.log("placement", "state", "ghost_rebuilt", {
-				reason = lastTile and "ensure_failed" or "no_tile",
-				tier = current.tier,
-			})
-		end
-	end
-end
-
-function ensureGhost()
+ensureGhost = function()
 	if ghost then
 		return ghost
 	end
-	if placementPayload and (placementPayload.kind == "machine" or placementPayload.kind == "relocate") then
-		local previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
+	local previewName
+	if placementPayload and placementPayload.kind == "machine" then
+		previewName = placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)
 		local preview = previewsFolder:FindFirstChild(previewName)
 		if preview and preview:IsA("Model") then
-				ghost = preview:Clone()
-				debugutil.log("placement", "state", "ghost_build", {
-					previewName = previewName,
-					found = true,
-					source = "preview",
-				})
+			ghost = preview:Clone()
+			debugutil.log("placement", "state", "ghost_build", {
+				previewName = previewName,
+				found = true,
+				source = "preview",
+			})
 		end
 	end
 	if not ghost then
 		ghost = ghostTemplate:Clone()
 		debugutil.log("placement", "state", "ghost_build", {
-			previewName = placementPayload and (placementPayload.machineType .. "_t" .. tostring(placementPayload.tier)) or "unknown",
+			previewName = previewName or "unknown",
 			found = false,
 			source = "template",
 		})
 	end
+	debugutil.log("placement", "state", "ghost_ensure_called", {
+		payload_type = placementPayload and placementPayload.machineType,
+		payload_tier = placementPayload and placementPayload.tier,
+	})
 	ghost.Parent = workspace
 	for _, part in ipairs(ghost:GetDescendants()) do
 		if part:IsA("BasePart") then
@@ -234,7 +131,7 @@ function ensureGhost()
 	return ghost
 end
 
-local function replaceGhostPreview(machineType, tier)
+replaceGhostPreview = function(machineType, tier)
 	if not ghost then
 		return nil
 	end
@@ -284,22 +181,7 @@ local function replaceGhostPreview(machineType, tier)
 	return ghost
 end
 
-local function setGhostVisible(visible, allowed)
-	if not ghost then
-		return
-	end
-	if placementPayload and placementPayload.kind == "machine" then
-		return
-	end
-	for _, part in ipairs(ghost:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.Transparency = visible and (allowed and 0.4 or 0.6) or 1
-			part.Color = allowed and Color3.fromRGB(80, 180, 80) or Color3.fromRGB(220, 80, 80)
-		end
-	end
-end
-
-function snapGhostToTile(tile)
+snapGhostToTile = function(tile)
 	if not ghost or not tile then
 		return
 	end
@@ -312,6 +194,18 @@ function snapGhostToTile(tile)
 	local target = CFrame.new(tp.Position.X, y, tp.Position.Z)
 	local delta = target.Position - gp.Position
 	ghost:PivotTo(ghost:GetPivot() + delta)
+end
+
+local function setGhostVisible(visible, allowed)
+	if not ghost then
+		return
+	end
+	for _, part in ipairs(ghost:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Transparency = visible and (allowed and 0.4 or 0.6) or 1
+			part.Color = allowed and Color3.fromRGB(80, 180, 80) or Color3.fromRGB(220, 80, 80)
+		end
+	end
 end
 
 local function raycastToTile()
@@ -381,6 +275,111 @@ local function updatePermission(tile)
 	return allowed
 end
 
+local function onWheelAction(actionName, inputState, inputObject)
+	if inputObject.UserInputType ~= Enum.UserInputType.MouseWheel then
+		return Enum.ContextActionResult.Pass
+	end
+	if inputObject.Position.Z > 0 then
+		Selection.Next()
+	elseif inputObject.Position.Z < 0 then
+		Selection.Prev()
+	end
+	local current = Selection.GetCurrent()
+	if placementPayload and placementPayload.kind == "machine" and current then
+		placementPayload.tier = current.tier
+	end
+	hoverDirty = true
+	if placementPayload and placementPayload.kind == "machine" then
+		if not ghost then
+			ensureGhost()
+		end
+		if ghost and current then
+			replaceGhostPreview(placementPayload.machineType, placementPayload.tier)
+			if lastTile then
+				snapGhostToTile(lastTile)
+			end
+		end
+	end
+	debugutil.log("placement", "state", "wheel_action", {
+		delta = inputObject.Position.Z,
+		index = Selection.GetIndex(),
+		tier = current and current.tier,
+		payload_tier = placementPayload and placementPayload.tier,
+		lastTile = lastTile and lastTile:GetFullName() or "nil",
+	})
+	return Enum.ContextActionResult.Sink
+end
+
+local function bindWheel()
+	if wheelBound then
+		return
+	end
+	ContextActionService:BindActionAtPriority(WHEEL_ACTION, onWheelAction, false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseWheel)
+	wheelBound = true
+	debugutil.log("placement", "state", "wheel captured", {})
+end
+
+local function unbindWheel()
+	if not wheelBound then
+		return
+	end
+	ContextActionService:UnbindAction(WHEEL_ACTION)
+	wheelBound = false
+	debugutil.log("placement", "state", "wheel released", {})
+end
+
+local function exitPlacement(reason)
+	debugutil.log("placement", "state", "exit_begin", {
+		reason = reason,
+	})
+	if wheelBound then
+		unbindWheel()
+	end
+	if player and savedMinZoom and savedMaxZoom then
+		player.CameraMinZoomDistance = savedMinZoom
+		player.CameraMaxZoomDistance = savedMaxZoom
+		savedMinZoom = nil
+		savedMaxZoom = nil
+		debugutil.log("placement", "state", "camera zoom restored", {})
+	end
+	destroyGhost("exit")
+	clearHoverCache()
+	placementPayload = nil
+	stateModule.SetActive(false, reason)
+	setState("Idle", reason or "exit")
+	debugutil.log("placement", "state", "exit_end", {
+		reason = reason,
+	})
+end
+
+Selection.onChanged = function()
+	if not stateModule.IsActive() then
+		return
+	end
+	if not placementPayload or placementPayload.kind ~= "machine" then
+		return
+	end
+	local current = Selection.GetCurrent()
+	if not current then
+		return
+	end
+	placementPayload.tier = current.tier
+	hoverDirty = true
+	if not ghost then
+		ensureGhost()
+	end
+	if ghost then
+		replaceGhostPreview(placementPayload.machineType, placementPayload.tier)
+		if lastTile then
+			snapGhostToTile(lastTile)
+		end
+		debugutil.log("placement", "state", "ghost_rebuilt", {
+			reason = "selection_changed",
+			tier = current.tier,
+		})
+	end
+end
+
 local function onRender()
 	if state == "Idle" or state == "Cancelled" then
 		return
@@ -393,6 +392,7 @@ local function onRender()
 
 	if exiting then
 		destroyGhost("placement_inactive")
+		clearHoverCache()
 		setState("Idle", "placement_inactive")
 		return
 	end
@@ -401,20 +401,17 @@ local function onRender()
 		return
 	end
 
+	if entering then
+		hoverDirty = true
+	end
+
 	local tile = raycastToTile()
 
 	if not tile then
-		destroyGhost("no_tile", false)
-		lastTile = nil
-		lastPermission = nil
-		lastReason = nil
-		currentEvaluatedTile = nil
-		lastHoverGridX = nil
-		lastHoverGridZ = nil
-		lastHoverIslandId = nil
-		needPermissionRefresh = true
-		lastTileInvalidated = false
-		setState("Placing", "no_tile")
+		debugutil.log("placement", "state", "hover_gate", {
+			reason = "no_tile",
+		})
+		-- Keep lastTile/permission so the ghost can remain and reuse cached state when a tile is regained.
 		return
 	end
 
@@ -422,14 +419,23 @@ local function onRender()
 	local gridz = tile:GetAttribute("gridz")
 	local islandid = player:GetAttribute("islandid")
 
-	if gridx == lastHoverGridX and gridz == lastHoverGridZ and islandid == lastHoverIslandId and not lastTileInvalidated then
+	local tileChanged = gridx ~= lastHoverGridX or gridz ~= lastHoverGridZ or islandid ~= lastHoverIslandId
+
+	if not tileChanged and not hoverDirty then
 		return
 	end
-	lastTileInvalidated = false
-	local tileChanged = true
+
+	debugutil.log("placement", "state", "hover_gate", {
+		reason = tileChanged and "rebuild" or "hover_dirty",
+		gridx = gridx,
+		gridz = gridz,
+		islandid = islandid,
+		lastGridX = lastHoverGridX,
+		lastGridZ = lastHoverGridZ,
+		lastIsland = lastHoverIslandId,
+	})
 
 	if tileChanged then
-		log("state", "tile_hover_change", { tile = tile:GetFullName() })
 		lastTile = tile
 		lastHoverGridX = gridx
 		lastHoverGridZ = gridz
@@ -438,53 +444,52 @@ local function onRender()
 		lastPermission = nil
 		lastReason = nil
 		needPermissionRefresh = true
-		debugutil.log("placement", "state", "hover_debug", {
-			tile = tile:GetFullName(),
-			tileChanged = true,
-			calledEnsure = false,
-		})
+		log("state", "tile_hover_change", { tile = tile:GetFullName() })
 	end
+	hoverDirty = true
 
 	local previousCanPlace = lastPermission
 	local allowed
-	local permissionChanged = false
-	if needPermissionRefresh or tileChanged then
+	if tileChanged or needPermissionRefresh then
 		allowed = updatePermission(tile)
-		permissionChanged = allowed ~= previousCanPlace
 		needPermissionRefresh = false
 	else
 		allowed = lastPermission
 	end
 
-	if not allowed then
-		if permissionChanged or ghost then
-			destroyGhost("hover_invalid", false)
-		end
+	if allowed == nil then
 		return
 	end
 
-	if tileChanged or permissionChanged or not ghost then
-		ensureGhost(tileChanged and "tile_change" or (permissionChanged and "permission_changed" or "first_valid_hover"))
-		snapGhostToTile(tile)
+	if hoverDirty or not ghost then
+		ensureGhost()
+		if lastTile then
+			snapGhostToTile(lastTile)
+		end
 		setGhostVisible(true, allowed)
 		debugutil.log("placement", "state", "hover_debug", {
 			tile = tile:GetFullName(),
-			tileChanged = tileChanged,
+			tileChanged = true,
 			calledEnsure = true,
 		})
+		hoverDirty = false
+	end
+
+	if allowed ~= previousCanPlace then
+		if allowed then
+			setState("Valid", "permission_changed")
+		else
+			setState("Invalid", lastReason or "denied")
+		end
 	end
 end
 
-local cancel
-
 local function confirm(input)
 	if state ~= "Valid" then
-		-- invalid click while in placement: provide user feedback without changing flow
 		if stateModule.IsActive() then
 			if Feedback and Feedback.ShowInvalidPlacement then
 				Feedback.ShowInvalidPlacement(lastReason)
 			end
-			-- if lastReason indicates a locked tile, stay in placement
 			if lastReason == "tile_locked" then
 				log("decision", "locked tile pressed — staying in placement", {
 					gridx = lastTile and lastTile:GetAttribute("gridx"),
@@ -577,13 +582,7 @@ local function enterPlacement(payload)
 		cancel()
 	end
 	placementPayload = payload or { kind = "tile" }
-	lastTile = nil
-	lastPermission = nil
-	lastReason = nil
-	currentEvaluatedTile = nil
-	lastHoverGridX = nil
-	lastHoverGridZ = nil
-	lastHoverIslandId = nil
+	clearHoverCache()
 	stateModule.SetActive(true, "enter")
 	setState("Placing", "enter")
 	if player then
@@ -608,10 +607,7 @@ local function enterPlacement(payload)
 		lastHoverGridX = hovered:GetAttribute("gridx")
 		lastHoverGridZ = hovered:GetAttribute("gridz")
 		lastHoverIslandId = player:GetAttribute("islandid")
-		currentEvaluatedTile = nil
-		lastPermission = nil
-		lastReason = nil
-		needPermissionRefresh = true
+		hoverDirty = true
 	end
 	bindWheel()
 	if placementPayload.kind == "machine" then
