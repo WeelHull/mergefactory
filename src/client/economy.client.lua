@@ -1,10 +1,13 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local PlayerUI = require(script.Parent.playerui_controller)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
+
+local progressLoops = {}
 
 local function formatNumber(n)
 	n = tonumber(n) or 0
@@ -29,6 +32,38 @@ local function formatNumber(n)
 	end
 
 	return tostring(math.floor(n))
+end
+
+local function stopProgressLoop(model)
+	local conn = progressLoops[model]
+	if conn then
+		conn:Disconnect()
+		progressLoops[model] = nil
+	end
+end
+
+local function startProgressLoop(model)
+	stopProgressLoop(model)
+	if not model then
+		return
+	end
+	progressLoops[model] = RunService.Heartbeat:Connect(function()
+		if not model.Parent then
+			stopProgressLoop(model)
+			return
+		end
+		local billboard = model:FindFirstChildWhichIsA("BillboardGui", true)
+		local desc = billboard and (billboard:FindFirstChild("description") or billboard:FindFirstChildWhichIsA("Frame", true))
+		local bar = desc and desc:FindFirstChild("progress_bar")
+		local loadingBar = bar and bar:FindFirstChild("loading_bar")
+		if not loadingBar or not loadingBar:IsA("Frame") then
+			stopProgressLoop(model)
+			return
+		end
+		local baseSize = loadingBar.Size
+		local progress = os.clock() % 1
+		loadingBar.Size = UDim2.new(progress, 0, baseSize.Y.Scale, baseSize.Y.Offset)
+	end)
 end
 
 local function updateCash()
@@ -71,6 +106,7 @@ local function updateMachineLabel(model)
 	if multiplierLabel and multiplierLabel:IsA("TextLabel") then
 		multiplierLabel.Text = "Multiplier: x" .. tostring(multiplier)
 	end
+	startProgressLoop(model)
 end
 
 local function watchMachine(model)
@@ -84,6 +120,9 @@ local function watchMachine(model)
 	model:GetAttributeChangedSignal("cashMultiplier"):Connect(function()
 		updateMachineLabel(model)
 	end)
+	if model.Parent then
+		startProgressLoop(model)
+	end
 end
 
 local function processExistingMachines(folder)
