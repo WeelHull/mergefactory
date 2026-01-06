@@ -106,6 +106,17 @@ local function findAsset(machineType, tier)
 	return nil
 end
 
+local function resolveMultiplier(params)
+	local m = params and params.cashMultiplier
+	if typeof(m) == "number" then
+		m = math.floor(m)
+		if m >= 1 and m <= 10 then
+			return m
+		end
+	end
+	return math.random(1, 10)
+end
+
 function machinespawn.SpawnMachine(params)
 	if typeof(params) ~= "table" then
 		return false, "invalid_params"
@@ -117,6 +128,7 @@ function machinespawn.SpawnMachine(params)
 	local gridx = params.gridx
 	local gridz = params.gridz
 	local rotation = params.rotation
+	local cashMultiplier = resolveMultiplier(params)
 
 	if not initLogged then
 		initLogged = true
@@ -241,6 +253,7 @@ function machinespawn.SpawnMachine(params)
 	clone:SetAttribute("gridz", gridz)
 	clone:SetAttribute("rotation", rotation)
 	clone:SetAttribute("state", "Idle")
+	clone:SetAttribute("cashMultiplier", cashMultiplier)
 
 	local machinesFolder = workspace:FindFirstChild("machines")
 	if not machinesFolder then

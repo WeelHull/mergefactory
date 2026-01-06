@@ -8,6 +8,7 @@ local PlacementPermission = require(game.ServerScriptService.Server.modules.plac
 local MachineRegistry = require(game.ServerScriptService.Server.machineregistry)
 local Economy = require(game.ServerScriptService.Server.economy)
 local gridregistry = require(game.ServerScriptService.Server.gridregistry)
+local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
@@ -144,7 +145,11 @@ local function onTileUnlock(player, gridx, gridz)
 	end
 
 	local tileEntry = gridregistry.getTile(player:GetAttribute("islandid"), gx, gz)
-	local price = tileEntry and tileEntry.part and tileEntry.part:GetAttribute("price") or 0
+	local cps = player:GetAttribute("CashPerSecond") or 0
+	local price = EconomyConfig.GetTilePrice(gx, gz, cps)
+	if tileEntry and tileEntry.part then
+		tileEntry.part:SetAttribute("price", price)
+	end
 	if price > 0 and Economy.GetCash(player) < price then
 		debugutil.log("interaction", "warn", "tile unlock blocked", {
 			userid = player.UserId,

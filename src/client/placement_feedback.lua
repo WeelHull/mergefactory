@@ -18,21 +18,30 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Enabled = false
 gui.Parent = playerGui
 
+local function addStroke(label, color)
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = color or Color3.new(0, 0, 0)
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = label
+end
+
 local stateLabel = Instance.new("TextLabel")
 stateLabel.BackgroundTransparency = 1
 stateLabel.TextColor3 = Color3.new(1, 1, 1)
-stateLabel.TextStrokeTransparency = 0.5
+stateLabel.TextStrokeTransparency = 0
 stateLabel.Text = "Placement active"
 stateLabel.Font = Enum.Font.GothamBold
 stateLabel.TextSize = 16
 stateLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 stateLabel.Position = UDim2.new(0.5, 0, 0.82, 0)
 stateLabel.Parent = gui
+addStroke(stateLabel)
 
 local invalidLabel = Instance.new("TextLabel")
 invalidLabel.BackgroundTransparency = 1
 invalidLabel.TextColor3 = Color3.fromRGB(220, 80, 80)
-invalidLabel.TextStrokeTransparency = 0.5
+invalidLabel.TextStrokeTransparency = 0
 invalidLabel.Text = ""
 invalidLabel.Font = Enum.Font.GothamBold
 invalidLabel.TextSize = 16
@@ -40,6 +49,7 @@ invalidLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 invalidLabel.Position = UDim2.new(0.5, 0, 0.88, 0)
 invalidLabel.Visible = false
 invalidLabel.Parent = gui
+addStroke(invalidLabel, Color3.fromRGB(0, 0, 0))
 
 local lastShow = 0
 local cooldown = 0.3

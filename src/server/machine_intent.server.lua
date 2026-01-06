@@ -7,6 +7,8 @@ local debug = require(ServerScriptService.Server.debugutil)
 local IslandValidator = require(ServerScriptService.Server.islandvalidator)
 local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local MergeSystem = require(ServerScriptService.Server.mergesystem)
+local Economy = require(ServerScriptService.Server.economy)
+local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local TRACE = true
 local BOUND = false
@@ -18,6 +20,12 @@ end
 
 local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
 local machineIntentEvent = remotes:WaitForChild("machine_intent")
+local deleteResultEvent = remotes:FindFirstChild("machine_delete_result")
+if not deleteResultEvent then
+	deleteResultEvent = Instance.new("RemoteEvent")
+	deleteResultEvent.Name = "machine_delete_result"
+	deleteResultEvent.Parent = remotes
+end
 
 local VALID_ROTATION = {
 	[0] = true,
@@ -129,6 +137,34 @@ local function handleDeleteIntent(player, payload, islandid)
 		return
 	end
 
+	local machineType = ctx.model and ctx.model:GetAttribute("machineType")
+	local tier = ctx.model and ctx.model:GetAttribute("tier")
+	local cashPerSecond = player:GetAttribute("CashPerSecond") or 0
+	local cash = Economy.GetCash(player)
+	local owned = MachineRegistry.getMachinesForOwner(player.UserId)
+	local count = typeof(owned) == "table" and #owned or 1
+	local price = EconomyConfig.GetStoragePrice(machineType, tier, cashPerSecond, cash, count)
+
+	if price > 0 then
+		local spent = Economy.Spend(player, price)
+		if not spent then
+			debug.log("machine", "warn", "delete_rejected_insufficient", {
+				machineId = payload.machineId,
+				price = price,
+				cash = cash,
+			})
+			deleteResultEvent:FireClient(player, {
+				success = false,
+				machineId = payload.machineId,
+				machineType = machineType,
+				tier = tier,
+				price = price,
+				reason = "insufficient_funds",
+			})
+			return
+		end
+	end
+
 	MachineRegistry.UnbindTile(payload.machineId)
 	MachineRegistry.unregister(payload.machineId)
 	ctx.model:Destroy()
@@ -137,6 +173,14 @@ local function handleDeleteIntent(player, payload, islandid)
 		machineId = payload.machineId,
 		gridx = ctx.gridx,
 		gridz = ctx.gridz,
+	})
+
+	deleteResultEvent:FireClient(player, {
+		success = true,
+		machineId = payload.machineId,
+		machineType = machineType,
+		tier = tier,
+		price = price,
 	})
 end
 

@@ -8,6 +8,26 @@ local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local function formatNumber(n)
 	n = tonumber(n) or 0
+	local abs = math.abs(n)
+	local suffix = ""
+	local value = n
+
+	if abs >= 1_000_000_000 then
+		value = n / 1_000_000_000
+		suffix = "B"
+	elseif abs >= 1_000_000 then
+		value = n / 1_000_000
+		suffix = "M"
+	elseif abs >= 1_000 then
+		value = n / 1_000
+		suffix = "K"
+	end
+
+	if suffix ~= "" then
+		value = math.floor(value * 10 + 0.5) / 10 -- one decimal place rounded
+		return tostring(value) .. suffix
+	end
+
 	return tostring(math.floor(n))
 end
 
@@ -27,10 +47,14 @@ local function updateMachineLabel(model)
 	end
 	local machineType = model:GetAttribute("machineType")
 	local tier = model:GetAttribute("tier")
+	local multiplier = model:GetAttribute("cashMultiplier")
+	if typeof(multiplier) ~= "number" or multiplier < 1 then
+		multiplier = 1
+	end
 	if not machineType or not tier then
 		return
 	end
-	local rate = EconomyConfig.GetRate(machineType, tier)
+	local rate = EconomyConfig.GetRate(machineType, tier) * multiplier
 	local billboard = model:FindFirstChildWhichIsA("BillboardGui", true)
 	if not billboard then
 		return
@@ -43,6 +67,10 @@ local function updateMachineLabel(model)
 	if label and label:IsA("TextLabel") then
 		label.Text = "+$" .. formatNumber(rate) .. "/s"
 	end
+	local multiplierLabel = desc:FindFirstChild("cash_multiplier")
+	if multiplierLabel and multiplierLabel:IsA("TextLabel") then
+		multiplierLabel.Text = "Multiplier: x" .. tostring(multiplier)
+	end
 end
 
 local function watchMachine(model)
@@ -51,6 +79,9 @@ local function watchMachine(model)
 		updateMachineLabel(model)
 	end)
 	model:GetAttributeChangedSignal("machineType"):Connect(function()
+		updateMachineLabel(model)
+	end)
+	model:GetAttributeChangedSignal("cashMultiplier"):Connect(function()
 		updateMachineLabel(model)
 	end)
 end

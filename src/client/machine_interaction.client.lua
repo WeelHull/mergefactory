@@ -19,8 +19,7 @@ local MachineInteractionState = require(script.Parent.machineinteraction_state)
 local PlacementModeState = require(script.Parent.placementmode_state)
 local Inventory = require(script.Parent.inventory)
 local PlayerUI = require(script.Parent.playerui_controller)
-local Inventory = require(script.Parent.inventory)
-local PlayerUI = require(script.Parent.playerui_controller)
+local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local machinesFolder = Workspace:WaitForChild("machines")
 
@@ -35,12 +34,66 @@ local hoverHighlight
 local selectedHighlight
 local editOptions = playerGui:WaitForChild("editoptions")
 local editOptionsConnected = false
+local deleteCostLabel
 
 local function resolveGrid(model)
 	if not model then
 		return nil, nil
 	end
 	return model:GetAttribute("gridx"), model:GetAttribute("gridz")
+end
+
+local function formatCompact(amount)
+	local n = tonumber(amount) or 0
+	local abs = math.abs(n)
+	local suffix = ""
+	local value = n
+	if abs >= 1_000_000_000 then
+		value = n / 1_000_000_000
+		suffix = "B"
+	elseif abs >= 1_000_000 then
+		value = n / 1_000_000
+		suffix = "M"
+	elseif abs >= 1_000 then
+		value = n / 1_000
+		suffix = "K"
+	end
+	if suffix ~= "" then
+		value = math.floor(value * 10 + 0.5) / 10
+	else
+		value = math.floor(value)
+	end
+	return tostring(value) .. suffix
+end
+
+local function countOwnedMachines()
+	local count = 0
+	for _, m in ipairs(machinesFolder:GetChildren()) do
+		if m:IsA("Model") and m:GetAttribute("ownerUserId") == player.UserId then
+			count += 1
+		end
+	end
+	return math.max(1, count)
+end
+
+local function computeDeleteCost(model)
+	if not model then
+		return 0
+	end
+	local machineType = model:GetAttribute("machineType")
+	local tier = model:GetAttribute("tier")
+	local cashPerSecond = player:GetAttribute("CashPerSecond") or 0
+	local cash = player:GetAttribute("Cash") or 0
+	local count = countOwnedMachines()
+	return EconomyConfig.GetStoragePrice(machineType, tier, cashPerSecond, cash, count)
+end
+
+local function updateDeleteCostLabel(model)
+	if not deleteCostLabel or not deleteCostLabel:IsA("TextLabel") then
+		return
+	end
+	local price = computeDeleteCost(model)
+	deleteCostLabel.Text = formatCompact(price) .. " C$"
 end
 
 local function getMachineId(model)
@@ -61,10 +114,19 @@ local function handleDelete()
 	local machineId = getMachineId(currentSelected)
 	local machineType = currentSelected:GetAttribute("machineType")
 	local tier = currentSelected:GetAttribute("tier")
+	local price = computeDeleteCost(currentSelected)
+	local cash = player:GetAttribute("Cash") or 0
 	debug.log("machine", "decision", "delete_pressed", {
 		machine = currentSelected:GetFullName(),
 		machineId = machineId,
+		price = price,
+		cash = cash,
 	})
+	if price > 0 and cash < price then
+		local Notifier = require(script.Parent.notifier)
+		Notifier.Insufficient()
+		return
+	end
 	if not machineId then
 		debug.log("machine", "warn", "missing_machine_id", {
 			machine = currentSelected:GetFullName(),
@@ -75,15 +137,6 @@ local function handleDelete()
 		intent = "delete",
 		machineId = machineId,
 	})
-	if machineType and tier then
-		Inventory.Add(machineType, tier, 1)
-		PlayerUI.SetTierAmount(tier, Inventory.GetCount(machineType, tier))
-		debug.log("inventory", "state", "returned_to_inventory", {
-			machineType = machineType,
-			tier = tier,
-			reason = "delete_button",
-		})
-	end
 end
 
 local function handleMove()
@@ -170,11 +223,12 @@ end
 
 local function connectEditOptions()
 	if editOptionsConnected or not editOptions then
-		return
+	return
 	end
 	local deleteBtn = editOptions:FindFirstChild("delete_button", true)
 	local moveBtn = editOptions:FindFirstChild("move_button", true)
 	local rotateBtn = editOptions:FindFirstChild("rotate_button", true)
+	deleteCostLabel = deleteBtn and deleteBtn:FindFirstChild("coins_cost", true) or deleteCostLabel
 
 	if deleteBtn and (deleteBtn:IsA("ImageButton") or deleteBtn:IsA("TextButton")) then
 		deleteBtn.Activated:Connect(handleDelete)
@@ -264,6 +318,9 @@ local function clearSelected()
 		editOptions.Adornee = nil
 		debug.log("machine", "state", "editoptions_close", {})
 	end
+	if deleteCostLabel and deleteCostLabel:IsA("TextLabel") then
+		deleteCostLabel.Text = "--"
+	end
 end
 
 local function resolveMachine(target)
@@ -333,6 +390,7 @@ local function setSelected(machine)
 				machine = machine:GetFullName(),
 			})
 		end
+		updateDeleteCostLabel(machine)
 	end
 end
 
@@ -430,6 +488,36 @@ mouse.Button1Down:Connect(onClick)
 UserInputService.InputBegan:Connect(onInput)
 RunService.RenderStepped:Connect(step)
 connectEditOptions()
+
+local machineDeleteResultEvent = remotes:FindFirstChild("machine_delete_result") or remotes:WaitForChild("machine_delete_result", 5)
+if machineDeleteResultEvent then
+	machineDeleteResultEvent.OnClientEvent:Connect(function(payload)
+		if not payload then
+			return
+		end
+		if payload.success then
+			if payload.machineType and payload.tier then
+				Inventory.Add(payload.machineType, payload.tier, 1)
+				PlayerUI.SetTierAmount(payload.tier, Inventory.GetCount(payload.machineType, payload.tier))
+				updateDeleteCostLabel(currentSelected)
+			end
+		else
+			local Notifier = require(script.Parent.notifier)
+			Notifier.Insufficient()
+		end
+	end)
+end
+
+local function refreshDeleteCost()
+	if currentSelected then
+		updateDeleteCostLabel(currentSelected)
+	end
+end
+
+player:GetAttributeChangedSignal("Cash"):Connect(refreshDeleteCost)
+player:GetAttributeChangedSignal("CashPerSecond"):Connect(refreshDeleteCost)
+machinesFolder.ChildAdded:Connect(refreshDeleteCost)
+machinesFolder.ChildRemoved:Connect(refreshDeleteCost)
 
 --[[ Command Bar single-use test (client):
 local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")

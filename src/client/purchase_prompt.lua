@@ -16,6 +16,29 @@ local cancelButton
 local busy = false
 local pendingCallback
 
+local function formatCompact(amount)
+	local n = tonumber(amount) or 0
+	local abs = math.abs(n)
+	local suffix = ""
+	local value = n
+	if abs >= 1_000_000_000 then
+		value = n / 1_000_000_000
+		suffix = "B"
+	elseif abs >= 1_000_000 then
+		value = n / 1_000_000
+		suffix = "M"
+	elseif abs >= 1_000 then
+		value = n / 1_000
+		suffix = "K"
+	end
+	if suffix ~= "" then
+		value = math.floor(value * 10 + 0.5) / 10
+	else
+		value = math.floor(value)
+	end
+	return tostring(value) .. suffix
+end
+
 local function finish(result)
 	if pendingCallback then
 		pendingCallback(result)
@@ -94,14 +117,14 @@ function PurchasePrompt.Prompt(machineType, tier, price, callback)
 		local t = tonumber(tier) or 0
 		local p = tonumber(price) or 0
 		if p > 0 then
-			messageLabel.Text = string.format("You have 0 of Tier %d. Purchase for %d C$ to place?", t, p)
+			messageLabel.Text = string.format("You have 0 of Tier %d. Purchase for %s C$ to place?", t, formatCompact(p))
 		else
 			messageLabel.Text = string.format("You have 0 of Tier %d. Purchase one to place?", t)
 		end
 	end
 	if coinsCostLabel and coinsCostLabel:IsA("TextLabel") then
 		if price and price > 0 then
-			coinsCostLabel.Text = tostring(price) .. " C$"
+			coinsCostLabel.Text = formatCompact(price) .. " C$"
 		else
 			coinsCostLabel.Text = "--"
 		end

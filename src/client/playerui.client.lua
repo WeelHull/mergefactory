@@ -42,8 +42,10 @@ local function startBuild(trigger)
 		debugutil.log("ui", "warn", "build_no_selection", { trigger = trigger })
 		return
 	end
+	local player = game:GetService("Players").LocalPlayer
+	local cashPerSecond = player and player:GetAttribute("CashPerSecond") or 0
 	if not Inventory.Has(cur.machineType, cur.tier) then
-		local price = EconomyConfig.GetMachinePrice(cur.machineType, cur.tier)
+		local price = EconomyConfig.GetMachinePrice(cur.machineType, cur.tier, cashPerSecond)
 		PurchasePrompt.Prompt(cur.machineType, cur.tier, price, function(result)
 			if result and result.accepted then
 				local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")

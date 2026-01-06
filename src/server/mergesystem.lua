@@ -6,6 +6,7 @@ local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local machinespawn = require(ServerScriptService.Server.machinespawn)
 
 local MergeSystem = {}
+local MAX_TIER = 10
 
 -- Placeholder: placement mode is client-driven and not surfaced to the server yet.
 -- Guard remains explicit for future wiring; currently returns false (not active).
@@ -83,6 +84,15 @@ local function canMergeInternal(machineAId, machineBId)
 		return false, "tier_mismatch"
 	end
 
+	if typeof(tierA) == "number" and tierA >= MAX_TIER then
+		debug.log("merge", "decision", "deny", {
+			reason = "tier_cap",
+			tier = tierA,
+			max = MAX_TIER,
+		})
+		return false, "tier_cap"
+	end
+
 	debug.log("merge", "decision", "relocate_merge_allowed", {
 		machineA = machineAId,
 		machineB = machineBId,
@@ -127,6 +137,14 @@ function MergeSystem.ExecuteMerge(machineAId, machineBId)
 	local machineType = modelA:GetAttribute("machineType")
 	local tier = modelA:GetAttribute("tier")
 	local newTier = tier and tier + 1 or 1
+	if typeof(tier) == "number" and tier >= MAX_TIER then
+		debug.log("merge", "warn", "execute_failed", {
+			reason = "tier_cap",
+			tier = tier,
+			max = MAX_TIER,
+		})
+		return false, "tier_cap"
+	end
 
 	local gridx = modelB:GetAttribute("gridx")
 	local gridz = modelB:GetAttribute("gridz")

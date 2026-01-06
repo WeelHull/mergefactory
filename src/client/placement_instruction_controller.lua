@@ -19,6 +19,11 @@ local function bindUi(gui)
 	if not lbl or not lbl:IsA("TextLabel") then
 		return
 	end
+	local stroke = lbl:FindFirstChildWhichIsA("UIStroke") or Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = Color3.new(0, 0, 0)
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = lbl
 	feedbackGui = gui
 	label = lbl
 	label.Text = ""

@@ -25,12 +25,18 @@ local function ensureGui()
 	label.Position = UDim2.new(0, 0, 0, 10)
 	label.BackgroundTransparency = 1
 	label.TextColor3 = Color3.fromRGB(255, 80, 80)
-	label.TextStrokeTransparency = 0.5
+	label.TextStrokeTransparency = 0
 	label.TextScaled = true
 	label.Font = Enum.Font.FredokaOne
 	label.Text = ""
 	label.Visible = false
 	label.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = Color3.fromRGB(0, 0, 0)
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = label
 end
 
 local function show(text, duration, color)

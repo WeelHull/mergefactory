@@ -16,7 +16,11 @@ local function computePerSecond(player)
 		local machineType = model:GetAttribute("machineType")
 		local tier = model:GetAttribute("tier")
 		if machineType and tier then
-			total += EconomyConfig.GetRate(machineType, tier)
+			local multiplier = model:GetAttribute("cashMultiplier")
+			if typeof(multiplier) ~= "number" or multiplier < 1 then
+				multiplier = 1
+			end
+			total += EconomyConfig.GetRate(machineType, tier) * multiplier
 		end
 	end
 	return total

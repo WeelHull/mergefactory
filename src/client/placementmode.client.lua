@@ -46,11 +46,16 @@ local wheelBound = false
 local savedMinZoom
 local savedMaxZoom
 local currentRotation = 0
+local relocationSourceModel
+local relocationRemovedConn
 
 local ensureGhost
 local snapGhostToTile
 local replaceGhostPreview
 local cancel
+local exitPlacement
+local watchRelocationSource
+local clearRelocationWatcher
 
 Selection.Init()
 
@@ -79,6 +84,59 @@ local function clearHoverCache()
 	lastHoverIslandId = nil
 	needPermissionRefresh = true
 	hoverDirty = true
+end
+
+clearRelocationWatcher = function()
+	if relocationRemovedConn then
+		relocationRemovedConn:Disconnect()
+		relocationRemovedConn = nil
+	end
+	relocationSourceModel = nil
+end
+
+local function findRelocationSourceModel(machineId)
+	if typeof(machineId) ~= "string" or machineId == "" then
+		return nil
+	end
+	local machinesFolder = workspace:FindFirstChild("machines")
+	if not machinesFolder then
+		return nil
+	end
+	for _, child in ipairs(machinesFolder:GetChildren()) do
+		if child:IsA("Model") then
+			local id = child:GetAttribute("machineId") or child:GetAttribute("machineid")
+			if id == machineId then
+				return child
+			end
+		end
+	end
+	return nil
+end
+
+local function onRelocationSourceRemoved(machineId)
+	-- Merges triggered via machine interaction can destroy the relocating machine without going through confirm().
+	debugutil.log("merge", "state", "relocate_source_removed", {
+		machineId = machineId or (placementPayload and placementPayload.machineId),
+	})
+	clearRelocationWatcher()
+	if placementPayload and placementPayload.kind == "relocate" and stateModule.IsActive() then
+		MachineInteractionState.SetRelocating(false, "merge_complete")
+		exitPlacement("relocate_source_removed")
+	end
+end
+
+watchRelocationSource = function(machineId)
+	clearRelocationWatcher()
+	local model = findRelocationSourceModel(machineId)
+	if not model then
+		return
+	end
+	relocationSourceModel = model
+	relocationRemovedConn = model.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			onRelocationSourceRemoved(machineId)
+		end
+	end)
 end
 
 local function destroyGhost(reason, logExit)
@@ -340,10 +398,11 @@ local function unbindWheel()
 	debugutil.log("placement", "state", "wheel released", {})
 end
 
-local function exitPlacement(reason)
+exitPlacement = function(reason)
 	debugutil.log("placement", "state", "exit_begin", {
 		reason = reason,
 	})
+	clearRelocationWatcher()
 	if wheelBound then
 		unbindWheel()
 	end
@@ -631,6 +690,11 @@ local function enterPlacement(payload)
 		cancel()
 	end
 	placementPayload = payload or { kind = "tile" }
+	if placementPayload.kind == "relocate" and placementPayload.machineId then
+		watchRelocationSource(placementPayload.machineId)
+	else
+		clearRelocationWatcher()
+	end
 	currentRotation = placementPayload.rotation or 0
 	placementPayload.rotation = currentRotation
 	if placementPayload.kind == "machine" or placementPayload.kind == "relocate" then
@@ -685,6 +749,14 @@ end
 stateModule.SetEnterCallback(enterPlacement)
 stateModule.SetRotateCallback(rotatePlacement)
 
+player.CharacterAdded:Connect(function()
+	_G._placementInputConsumed.consumed = false
+	_G._placementInputConsumed.button = nil
+	if state ~= "Idle" then
+		exitPlacement("character_respawn")
+	end
+end)
+
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
 		return
@@ -705,7 +777,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			PlayerUI.ShowBuildMenu()
 			Inventory.EnsureStarter()
 			if not Inventory.Has(cur.machineType, cur.tier) then
-				local price = require(ReplicatedStorage.Shared.economy_config).GetMachinePrice(cur.machineType, cur.tier)
+				local price = require(ReplicatedStorage.Shared.economy_config).GetMachinePrice(cur.machineType, cur.tier, player:GetAttribute("CashPerSecond"))
 				PurchasePrompt.Prompt(cur.machineType, cur.tier, price, function(result)
 					if result and result.accepted then
 						Inventory.Add(cur.machineType, cur.tier, 1)

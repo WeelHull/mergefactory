@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -28,6 +29,63 @@ local remotes = ReplicatedStorage:FindFirstChild("Shared") and ReplicatedStorage
 local tileunlockRemote = remotes and remotes:FindFirstChild("tileunlock")
 local Notifier = require(script.Parent.notifier)
 
+local function formatCompact(amount)
+	local n = tonumber(amount) or 0
+	local abs = math.abs(n)
+	local suffix = ""
+	local value = n
+	if abs >= 1_000_000_000 then
+		value = n / 1_000_000_000
+		suffix = "B"
+	elseif abs >= 1_000_000 then
+		value = n / 1_000_000
+		suffix = "M"
+	elseif abs >= 1_000 then
+		value = n / 1_000
+		suffix = "K"
+	end
+	if suffix ~= "" then
+		value = math.floor(value * 10 + 0.5) / 10
+	else
+		value = math.floor(value)
+	end
+	return tostring(value) .. suffix
+end
+
+local function formatDuration(seconds)
+	local s = math.max(0, math.floor(seconds or 0))
+	if s <= 0 then
+		return "Ready"
+	end
+	local days = math.floor(s / 86400)
+	s -= days * 86400
+	local hours = math.floor(s / 3600)
+	s -= hours * 3600
+	local minutes = math.floor(s / 60)
+	local secs = s - minutes * 60
+	if days > 0 then
+		return string.format("%dD:%02dH:%02dM:%02dS", days, hours, minutes, secs)
+	elseif hours > 0 then
+		if secs > 0 then
+			return string.format("%dH:%02dM:%02dS", hours, minutes, secs)
+		end
+		return string.format("%dH:%02dM", hours, minutes)
+	elseif minutes > 0 then
+		return string.format("%dM:%02dS", minutes, secs)
+	end
+	return string.format("%dS", secs)
+end
+
+local function getTimeLabel()
+	if optionsFrame then
+		local found = optionsFrame:FindFirstChild("time_countdown", true)
+		if found then
+			return found
+		end
+	end
+	return tileoptions:FindFirstChild("time_countdown", true)
+end
+
 local currentTile
 local currentGridX
 local currentGridZ
@@ -35,6 +93,7 @@ local hoverAPI
 local clickConn
 local interactionState = require(script.Parent.tileinteractionstate)
 local forceClearHover
+local countdownConn
 local function updatePrice(tile, gridx, gridz)
 	local coinsCostLabel = getCoinsCostLabel()
 	if not coinsCostLabel or not coinsCostLabel:IsA("GuiObject") then
@@ -43,12 +102,12 @@ local function updatePrice(tile, gridx, gridz)
 		})
 		return
 	end
-	local price = tile and tile:GetAttribute("price")
-	if not price then
-		price = EconomyConfig.GetTilePrice(gridx, gridz)
+	local cps = player:GetAttribute("CashPerSecond") or 0
+	local price = EconomyConfig.GetTilePrice(gridx, gridz, cps)
+	if tile and tile:IsA("BasePart") then
+		tile:SetAttribute("price", price)
 	end
-	price = math.floor(price or 0)
-	coinsCostLabel.Text = tostring(price) .. " C$"
+	coinsCostLabel.Text = formatCompact(price) .. " C$"
 	debugutil.log("tileoptions", "state", "price_set", {
 		gridx = gridx,
 		gridz = gridz,
@@ -57,11 +116,51 @@ local function updatePrice(tile, gridx, gridz)
 	})
 end
 
+local function stopCountdown()
+	if countdownConn then
+		countdownConn:Disconnect()
+		countdownConn = nil
+	end
+	local lbl = getTimeLabel()
+	if lbl and lbl:IsA("TextLabel") then
+		lbl.Text = "--"
+	end
+end
+
+local function startCountdown(tile, gridx, gridz)
+	stopCountdown()
+	local lbl = getTimeLabel()
+	if not lbl or not lbl:IsA("TextLabel") then
+		return
+	end
+	countdownConn = RunService.Heartbeat:Connect(function()
+		if not tileoptions.Enabled then
+			stopCountdown()
+			return
+		end
+		local cps = player:GetAttribute("CashPerSecond") or 0
+		local cash = player:GetAttribute("Cash") or 0
+		local price = EconomyConfig.GetTilePrice(gridx, gridz, cps)
+		if tile and tile:IsA("BasePart") then
+			tile:SetAttribute("price", price)
+		end
+		local remaining = price - cash
+		if remaining <= 0 then
+			lbl.Text = "Ready"
+		elseif cps <= 0 then
+			lbl.Text = "--"
+		else
+			lbl.Text = formatDuration(math.ceil(remaining / cps))
+		end
+	end)
+end
+
 local function closeBoard(reason)
 	if tileoptions then
 		tileoptions.Enabled = false
 		tileoptions.Adornee = nil
 	end
+	stopCountdown()
 	currentTile = nil
 	currentGridX = nil
 	currentGridZ = nil
@@ -94,6 +193,7 @@ local function openBoard(tile, gridx, gridz)
 	currentGridX = gridx
 	currentGridZ = gridz
 	updatePrice(tile, gridx, gridz)
+	startCountdown(tile, gridx, gridz)
 	tileoptions.Adornee = tile:IsA("Model") and tile.PrimaryPart or tile
 	tileoptions.Enabled = true
 	debugutil.log("tileoptions", "state", "open", {

@@ -1,9 +1,12 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 
 local PlayerUI = {}
+local previewsFolder = ReplicatedStorage:FindFirstChild("previews")
+local previewConnections = {}
 
 local refs = {
 	playerUI = nil,
@@ -21,6 +24,90 @@ local refs = {
 }
 
 local warnedMissing = false
+local tierPreviewSeeded = false
+
+local function formatCompact(amount)
+	local n = tonumber(amount) or 0
+	local abs = math.abs(n)
+	local suffix = ""
+	local value = n
+	if abs >= 1_000_000_000 then
+		value = n / 1_000_000_000
+		suffix = "B"
+	elseif abs >= 1_000_000 then
+		value = n / 1_000_000
+		suffix = "M"
+	elseif abs >= 1_000 then
+		value = n / 1_000
+		suffix = "K"
+	end
+	if suffix ~= "" then
+		value = math.floor(value * 10 + 0.5) / 10
+	else
+		value = math.floor(value)
+	end
+	return tostring(value) .. suffix
+end
+
+local function setupTierPreview(btn, machineType, tier)
+	if not btn then
+		return
+	end
+	local viewport = btn:FindFirstChild("machine_view")
+	if not viewport or not viewport:IsA("ViewportFrame") then
+		return
+	end
+
+	local world = viewport:FindFirstChildOfClass("WorldModel")
+	if not world then
+		world = Instance.new("WorldModel")
+		world.Name = "PreviewWorld"
+		world.Parent = viewport
+	end
+
+	for _, child in ipairs(world:GetChildren()) do
+		child:Destroy()
+	end
+
+	local previewName = tostring(machineType) .. "_t" .. tostring(tier)
+	local preview = previewsFolder and previewsFolder:FindFirstChild(previewName)
+	if not preview or not preview:IsA("Model") then
+		return
+	end
+
+	local model = preview:Clone()
+	model.Parent = world
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+		end
+	end
+
+	local camera = viewport.CurrentCamera
+	if not camera then
+		camera = Instance.new("Camera")
+		camera.Parent = viewport
+		viewport.CurrentCamera = camera
+	end
+
+	local cf, size = model:GetBoundingBox()
+	local maxDim = math.max(size.X, size.Y, size.Z)
+	local dist = math.max(4, maxDim * 1.35)
+	local lookAt = cf.Position
+	camera.CFrame = CFrame.new(lookAt + Vector3.new(dist, dist * 0.25, dist), lookAt)
+
+	-- slow rotate
+	local angle = 0
+	if previewConnections[viewport] then
+		previewConnections[viewport]:Disconnect()
+	end
+	local conn = RunService.RenderStepped:Connect(function(dt)
+		angle += dt * math.rad(20)
+		local offset = Vector3.new(math.cos(angle) * dist, dist * 0.25, math.sin(angle) * dist)
+		camera.CFrame = CFrame.new(lookAt + offset, lookAt)
+	end)
+	previewConnections[viewport] = conn
+end
 
 local function ensureRefs()
 	local player = Players.LocalPlayer
@@ -61,8 +148,7 @@ local function ensureRefs()
 		local machineMenu = refs.buildFrame and refs.buildFrame:FindFirstChild("machine_menu") or nil
 		refs.closeButton = refs.closeButton or (machineMenu and machineMenu:FindFirstChild("close") or nil)
 		if not refs.tierButtons then
-			local viewport = machineMenu and machineMenu:FindFirstChild("ViewportFrame")
-			local scroll = viewport and viewport:FindFirstChild("ScrollingFrame")
+			local scroll = machineMenu and machineMenu:FindFirstChild("ScrollingFrame")
 			if scroll then
 				local foundButtons = {}
 				local foundLabels = {}
@@ -75,6 +161,7 @@ local function ensureRefs()
 						if amt then
 							foundLabels[tier] = amt
 						end
+						setupTierPreview(btn, "generator", tier)
 					end
 				end
 				if next(foundButtons) then
@@ -214,7 +301,7 @@ function PlayerUI.SetCash(amount)
 		return
 	end
 	if refs.cashAmountLabel and refs.cashAmountLabel:IsA("TextLabel") then
-		refs.cashAmountLabel.Text = tostring(math.floor(amount or 0)) .. " C$"
+		refs.cashAmountLabel.Text = formatCompact(amount) .. " C$"
 	end
 end
 
@@ -223,7 +310,7 @@ function PlayerUI.SetCashPerSecond(amount)
 		return
 	end
 	if refs.cashPerSecondLabel and refs.cashPerSecondLabel:IsA("TextLabel") then
-		refs.cashPerSecondLabel.Text = tostring(math.floor(amount or 0)) .. " C$/S"
+		refs.cashPerSecondLabel.Text = formatCompact(amount) .. " C$/S"
 	end
 end
 
