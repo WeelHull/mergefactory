@@ -3,17 +3,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local playerGui
 local debugutil = require(ReplicatedStorage.Shared.debugutil)
 local PlacementMode = require(script.Parent.placementmode_state)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
-local tileoptions = playerGui:WaitForChild("tileoptions")
-tileoptions.Enabled = false
-tileoptions.Adornee = nil
-
-local optionsFrame = tileoptions:FindFirstChild("options") or tileoptions:FindFirstChild("Options") or tileoptions:WaitForChild("options", 5)
-local buyButton = optionsFrame and optionsFrame:FindFirstChild("buytile")
+local tileoptions
+local optionsFrame
+local buyButton
+local buyConn
 local function getCoinsCostLabel()
 	if optionsFrame then
 		local found = optionsFrame:FindFirstChild("coins_cost", true)
@@ -83,7 +81,7 @@ local function getTimeLabel()
 			return found
 		end
 	end
-	return tileoptions:FindFirstChild("time_countdown", true)
+	return tileoptions and tileoptions:FindFirstChild("time_countdown", true) or nil
 end
 
 local currentTile
@@ -94,7 +92,74 @@ local clickConn
 local interactionState = require(script.Parent.tileinteractionstate)
 local forceClearHover
 local countdownConn
+local closeBoard
+local function ensureUi()
+	if not playerGui or not playerGui.Parent then
+		playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
+	end
+	if not playerGui then
+		return false
+	end
+	if not tileoptions or not tileoptions.Parent then
+		tileoptions = playerGui:FindFirstChild("tileoptions") or playerGui:WaitForChild("tileoptions", 5)
+		if tileoptions then
+			tileoptions.Enabled = false
+			tileoptions.Adornee = nil
+		end
+	end
+	if not tileoptions then
+		return false
+	end
+	if not optionsFrame or not optionsFrame.Parent then
+		optionsFrame = tileoptions:FindFirstChild("options") or tileoptions:FindFirstChild("Options") or tileoptions:WaitForChild("options", 5) or tileoptions:FindFirstChildWhichIsA("Frame")
+	end
+	if not buyButton or not buyButton.Parent then
+		buyButton = optionsFrame and optionsFrame:FindFirstChild("buytile")
+		if buyButton and buyButton:IsA("GuiButton") then
+			if buyConn then
+				buyConn:Disconnect()
+			end
+			buyConn = buyButton.Activated:Connect(function()
+				if not currentTile then
+					debugutil.log("tileoptions", "warn", "buy clicked without tile")
+					return
+				end
+				local gx = currentGridX or currentTile:GetAttribute("gridx")
+				local gz = currentGridZ or currentTile:GetAttribute("gridz")
+				debugutil.log("tileoptions", "decision", "buy pressed", { gridx = gx, gridz = gz, tile = currentTile:GetFullName() })
+				local freshApi = _G._tileIntentAPI
+				if freshApi and freshApi.ClearPending then
+					freshApi.ClearPending("buy")
+				end
+				forceClearHover()
+				closeBoard("buy")
+				if tileunlockRemote then
+					tileunlockRemote:FireServer(gx, gz)
+				end
+				closeBoard("buy_sent")
+			end)
+		end
+	end
+	return true
+end
+
+player.CharacterAdded:Connect(function()
+	playerGui = nil
+	tileoptions = nil
+	optionsFrame = nil
+	buyButton = nil
+	if buyConn then
+		buyConn:Disconnect()
+		buyConn = nil
+	end
+	ensureUi()
+end)
+
+ensureUi()
 local function updatePrice(tile, gridx, gridz)
+	if not ensureUi() then
+		return
+	end
 	local coinsCostLabel = getCoinsCostLabel()
 	if not coinsCostLabel or not coinsCostLabel:IsA("GuiObject") then
 		debugutil.log("tileoptions", "warn", "coins_cost_missing", {
@@ -155,7 +220,7 @@ local function startCountdown(tile, gridx, gridz)
 	end)
 end
 
-local function closeBoard(reason)
+closeBoard = function(reason)
 	if tileoptions then
 		tileoptions.Enabled = false
 		tileoptions.Adornee = nil
@@ -189,6 +254,9 @@ local function closeBoard(reason)
 end
 
 local function openBoard(tile, gridx, gridz)
+	if not ensureUi() then
+		return
+	end
 	currentTile = tile
 	currentGridX = gridx
 	currentGridZ = gridz
@@ -240,25 +308,7 @@ function forceClearHover()
 end
 
 if buyButton and buyButton:IsA("GuiButton") then
-	buyButton.Activated:Connect(function()
-		if not currentTile then
-			debugutil.log("tileoptions", "warn", "buy clicked without tile")
-			return
-		end
-		local gx = currentGridX or currentTile:GetAttribute("gridx")
-		local gz = currentGridZ or currentTile:GetAttribute("gridz")
-		debugutil.log("tileoptions", "decision", "buy pressed", { gridx = gx, gridz = gz, tile = currentTile:GetFullName() })
-		local freshApi = _G._tileIntentAPI
-		if freshApi and freshApi.ClearPending then
-			freshApi.ClearPending("buy")
-		end
-		forceClearHover()
-		closeBoard("buy")
-		if tileunlockRemote then
-			tileunlockRemote:FireServer(gx, gz)
-		end
-		closeBoard("buy_sent")
-	end)
+	-- initial connection handled in ensureUi; this block kept for legacy but will be overwritten on refresh
 end
 
 if tileunlockRemote then
@@ -294,3 +344,17 @@ player:GetMouse().Button1Down:Connect(function()
 		closeBoard("external_cancel")
 	end
 end)
+
+player.CharacterAdded:Connect(function()
+	playerGui = nil
+	tileoptions = nil
+	optionsFrame = nil
+	buyButton = nil
+	if buyConn then
+		buyConn:Disconnect()
+		buyConn = nil
+	end
+	ensureUi()
+end)
+
+ensureUi()

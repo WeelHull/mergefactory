@@ -9,10 +9,14 @@ local MachineRegistry = require(game.ServerScriptService.Server.machineregistry)
 local Economy = require(game.ServerScriptService.Server.economy)
 local gridregistry = require(game.ServerScriptService.Server.gridregistry)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
+local Inventory = require(game.ServerScriptService.Server.inventory)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
 local HRP_TIMEOUT = 5
+
+-- Instant respawn
+Players.RespawnTime = 0
 
 local function findIslandSpawn(islandid)
 	local islandsFolder = workspace:FindFirstChild("islands")
@@ -82,6 +86,9 @@ local function ensureStartUnlocked(player)
 		islandid = islandid,
 	})
 
+	Inventory.Reset(player.UserId)
+	Inventory.Grant(player.UserId, "generator", 1, 1)
+
 	local unlocked = unlockcontroller.unlockTile(player, START_GRIDX, START_GRIDZ)
 	if unlocked then
 		debugutil.log("lifecycle", "state", "start unlocked", {
@@ -123,7 +130,11 @@ local spendCashFn = remotes:FindFirstChild("spend_cash") or Instance.new("Remote
 spendCashFn.Name = "spend_cash"
 spendCashFn.Parent = remotes
 spendCashFn.OnServerInvoke = function(player, amount)
-	return Economy.Spend(player, amount)
+	debugutil.log("economy", "warn", "spend_cash_remote_blocked", {
+		userid = player and player.UserId,
+		requested = amount,
+	})
+	return false
 end
 
 local function onTileUnlock(player, gridx, gridz)

@@ -141,8 +141,8 @@ debugutil.log = function(system, level, message, data)
 		else
 			setPlaceholder("cancel")
 		end
-	elseif level == "decision" and message == "confirm" then
-		setPlaceholder("confirm")
+		elseif level == "decision" and message == "confirm" then
+			setPlaceholder("confirm")
 	elseif level == "decision" and (message == "deny" or message == "canPlace") and data and data.allowed == false then
 		lastDeniedReason = data.reason
 		mergePossible = false
@@ -181,12 +181,15 @@ function setPlaceholder(placeholder)
 		Notifier.Warn("Tile locked", 2)
 		morph("Tile locked", 1.2, placeholder)
 		terminalLocked = true
-	elseif placeholder == "confirm" then
-		local text = mergePossible and "Merged" or "Placed"
-		Notifier.Show(text, 1.5)
-		morph(text, 0.8, placeholder)
-		mergePossible = false
-		terminalLocked = true
+		elseif placeholder == "confirm" then
+			if mergePossible then
+				-- Merge flow shows its own feedback; skip placement toast here.
+				return
+			end
+			Notifier.Show("Placed", 1.5)
+			morph("Placed", 0.8, placeholder)
+			mergePossible = false
+			terminalLocked = true
 	elseif placeholder == "cancel" then
 		if not terminalLocked then
 			Notifier.Show("Placement cancelled", 1.5)

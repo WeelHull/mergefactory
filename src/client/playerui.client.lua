@@ -43,25 +43,16 @@ local function startBuild(trigger)
 		return
 	end
 	local player = game:GetService("Players").LocalPlayer
-	local cashPerSecond = player and player:GetAttribute("CashPerSecond") or 0
-	if not Inventory.Has(cur.machineType, cur.tier) then
-		local price = EconomyConfig.GetMachinePrice(cur.machineType, cur.tier, cashPerSecond)
-		PurchasePrompt.Prompt(cur.machineType, cur.tier, price, function(result)
-			if result and result.accepted then
-				local remotes = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("remotes")
-				local spendCashFn = remotes:FindFirstChild("spend_cash")
-				if spendCashFn then
-					local ok = spendCashFn:InvokeServer(price)
-					if not ok then
-						Notifier.Insufficient()
-						return
-					end
-				end
-				Inventory.Add(cur.machineType, cur.tier, 1)
-				PlayerUI.SetTierAmount(cur.tier, Inventory.GetCount(cur.machineType, cur.tier))
-				enterPlacementForSelection(trigger, cur)
-			else
-				debugutil.log("ui", "warn", "purchase_declined", { trigger = trigger, tier = cur.tier })
+		local cashPerSecond = player and player:GetAttribute("CashPerSecond") or 0
+		if not Inventory.Has(cur.machineType, cur.tier) then
+			local price = EconomyConfig.GetMachinePrice(cur.machineType, cur.tier, cashPerSecond)
+			PurchasePrompt.Prompt(cur.machineType, cur.tier, price, function(result)
+				if result and result.accepted then
+					Inventory.Add(cur.machineType, cur.tier, 1)
+					PlayerUI.SetTierAmount(cur.tier, Inventory.GetCount(cur.machineType, cur.tier))
+					enterPlacementForSelection(trigger, cur)
+				else
+					debugutil.log("ui", "warn", "purchase_declined", { trigger = trigger, tier = cur.tier })
 			end
 		end)
 		return

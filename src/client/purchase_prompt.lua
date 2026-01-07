@@ -16,6 +16,17 @@ local cancelButton
 local busy = false
 local pendingCallback
 
+local function forceCloseMergePrompt()
+	local mg = playerGui:FindFirstChild("merge_prompt")
+	if mg and mg:IsA("ScreenGui") then
+		mg.Enabled = false
+	end
+	local mf = mg and (mg:FindFirstChild("merge_frame") or mg:FindFirstChildWhichIsA("Frame", true))
+	if mf then
+		mf.Visible = false
+	end
+end
+
 local function formatCompact(amount)
 	local n = tonumber(amount) or 0
 	local abs = math.abs(n)
@@ -138,6 +149,7 @@ function PurchasePrompt.Prompt(machineType, tier, price, callback)
 	if frame then
 		frame.Visible = true
 	end
+	forceCloseMergePrompt()
 end
 
 return PurchasePrompt

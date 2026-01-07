@@ -35,6 +35,8 @@ local selectedHighlight
 local editOptions = playerGui:WaitForChild("editoptions")
 local editOptionsConnected = false
 local deleteCostLabel
+local characterConn
+local lastDeletePriceUpdate = 0
 
 local function resolveGrid(model)
 	if not model then
@@ -300,11 +302,11 @@ local function clearHover()
 	end
 end
 
-local function clearSelected()
-	if currentSelected then
-		logState("deselect", {
-			machine = currentSelected:GetFullName(),
-		})
+	local function clearSelected()
+		if currentSelected then
+			logState("deselect", {
+				machine = currentSelected:GetFullName(),
+			})
 	end
 	currentSelected = nil
 	if selectedHighlight then
@@ -355,13 +357,14 @@ local function setHover(machine)
 	end
 end
 
-local function setSelected(machine)
-	if machine == currentSelected then
-		return
-	end
+	local function setSelected(machine)
+		if machine == currentSelected then
+			updateDeleteCostLabel(currentSelected)
+			return
+		end
 
-	clearSelected()
-	currentSelected = machine
+		clearSelected()
+		currentSelected = machine
 	local h = ensureSelectedHighlight()
 	h.Adornee = machine
 	h.Parent = machine
@@ -390,9 +393,9 @@ local function setSelected(machine)
 				machine = machine:GetFullName(),
 			})
 		end
-		updateDeleteCostLabel(machine)
+			updateDeleteCostLabel(machine)
+		end
 	end
-end
 
 function MachineInteraction.IsActive()
 	return currentSelected ~= nil
@@ -467,22 +470,35 @@ local function onInput(input, processed)
 	end
 end
 
-local function step()
-	if currentSelected and (not currentSelected.Parent or currentSelected.Parent ~= machinesFolder) then
-		clearSelected()
+	local function maybeRefreshDeleteCost(now)
+		if not currentSelected or not deleteCostLabel or not deleteCostLabel:IsA("TextLabel") then
+			return
+		end
+		if now - lastDeletePriceUpdate < 0.25 then
+			return
+		end
+		lastDeletePriceUpdate = now
+		updateDeleteCostLabel(currentSelected)
 	end
 
-	local target = mouse.Target
+	local function step()
+		if currentSelected and (not currentSelected.Parent or currentSelected.Parent ~= machinesFolder) then
+			clearSelected()
+		end
+
+		local target = mouse.Target
 	local machine = resolveMachine(target)
 
 	if machine and machine ~= currentSelected then
 		setHover(machine)
 	else
 		if currentHover then
-			clearHover()
+				clearHover()
+			end
 		end
+
+		maybeRefreshDeleteCost(os.clock())
 	end
-end
 
 mouse.Button1Down:Connect(onClick)
 UserInputService.InputBegan:Connect(onInput)
@@ -490,20 +506,45 @@ RunService.RenderStepped:Connect(step)
 connectEditOptions()
 
 local machineDeleteResultEvent = remotes:FindFirstChild("machine_delete_result") or remotes:WaitForChild("machine_delete_result", 5)
-if machineDeleteResultEvent then
-	machineDeleteResultEvent.OnClientEvent:Connect(function(payload)
-		if not payload then
-			return
-		end
-		if payload.success then
-			if payload.machineType and payload.tier then
-				Inventory.Add(payload.machineType, payload.tier, 1)
-				PlayerUI.SetTierAmount(payload.tier, Inventory.GetCount(payload.machineType, payload.tier))
-				updateDeleteCostLabel(currentSelected)
+	if machineDeleteResultEvent then
+		machineDeleteResultEvent.OnClientEvent:Connect(function(payload)
+			if not payload then
+				return
 			end
-		else
-			local Notifier = require(script.Parent.notifier)
-			Notifier.Insufficient()
+			if payload.success then
+				if payload.machineType and payload.tier then
+					Inventory.Add(payload.machineType, payload.tier, 1)
+					PlayerUI.SetTierAmount(payload.tier, Inventory.GetCount(payload.machineType, payload.tier))
+					updateDeleteCostLabel(currentSelected)
+					if deleteCostLabel and deleteCostLabel:IsA("TextLabel") and payload.price then
+						deleteCostLabel.Text = formatCompact(payload.price) .. " C$"
+					end
+				end
+			else
+				local Notifier = require(script.Parent.notifier)
+				Notifier.Insufficient()
+			end
+	end)
+end
+
+if not characterConn then
+	characterConn = player.CharacterAdded:Connect(function()
+		clearHover()
+		clearSelected()
+		if editOptions then
+			editOptions.Enabled = false
+			editOptions.Adornee = nil
+		end
+		MachineInteractionState.SetActive(false)
+		MachineInteractionState.SetRelocating(false)
+		-- refresh UI references because PlayerGui descendants can reset on spawn
+		local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
+		if pg then
+			playerGui = pg
+			editOptions = playerGui:FindFirstChild("editoptions") or playerGui:WaitForChild("editoptions", 5)
+			editOptionsConnected = false
+			deleteCostLabel = nil
+			connectEditOptions()
 		end
 	end)
 end

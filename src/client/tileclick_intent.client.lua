@@ -29,18 +29,31 @@ local VALID_COLOR = Color3.fromRGB(80, 180, 80)
 local INVALID_COLOR = Color3.fromRGB(220, 80, 80)
 local PENDING_COLOR = Color3.fromRGB(240, 200, 80)
 
-local pulseHighlight = Instance.new("Highlight")
-pulseHighlight.FillTransparency = 1
-pulseHighlight.OutlineTransparency = 0
-pulseHighlight.Enabled = false
-pulseHighlight.Parent = playerGui
+local pulseHighlight
+local pendingHighlight
 
-local pendingHighlight = Instance.new("Highlight")
-pendingHighlight.FillTransparency = 1
-pendingHighlight.OutlineTransparency = 0
-pendingHighlight.OutlineColor = PENDING_COLOR
-pendingHighlight.Enabled = false
-pendingHighlight.Parent = playerGui
+local function ensureHighlights()
+	if not playerGui or not playerGui.Parent then
+		return
+	end
+	if not pulseHighlight or not pulseHighlight.Parent then
+		pulseHighlight = Instance.new("Highlight")
+		pulseHighlight.FillTransparency = 1
+		pulseHighlight.OutlineTransparency = 0
+		pulseHighlight.Enabled = false
+		pulseHighlight.Parent = playerGui
+	end
+	if not pendingHighlight or not pendingHighlight.Parent then
+		pendingHighlight = Instance.new("Highlight")
+		pendingHighlight.FillTransparency = 1
+		pendingHighlight.OutlineTransparency = 0
+		pendingHighlight.OutlineColor = PENDING_COLOR
+		pendingHighlight.Enabled = false
+		pendingHighlight.Parent = playerGui
+	end
+end
+
+ensureHighlights()
 
 for _, inst in ipairs(workspace:GetDescendants()) do
 	if inst:IsA("Highlight") then
@@ -84,11 +97,13 @@ local function logClient(message, data)
 end
 
 local function clearPulse()
+	ensureHighlights()
 	pulseHighlight.Enabled = false
 	pulseHighlight.Adornee = nil
 end
 
 local function clearPending(reason)
+	ensureHighlights()
 	if pendingTile then
 		debugutil.log("interaction", "state", "pending cleared", { reason = reason })
 		clearEvent:Fire()
@@ -137,6 +152,7 @@ local function pulse(part, isValid)
 	if not part then
 		return
 	end
+	ensureHighlights()
 	pulseHighlight.Adornee = part
 	pulseHighlight.OutlineColor = isValid and VALID_COLOR or INVALID_COLOR
 	pulseHighlight.Enabled = true
@@ -328,21 +344,28 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
-	if tileunlockRemote then
-		tileunlockRemote.OnClientEvent:Connect(function(payload)
-			inFlight = false
-			local success = payload and payload.success
-			local key = payload and (payload.gridx .. "_" .. payload.gridz)
-			if not success then
-				lastBlockedKey = key
-				debugutil.log("interaction", "warn", "unlock response blocked", payload or {})
-			else
-				lastBlockedKey = nil
-				debugutil.log("interaction", "state", "unlock response success", payload or {})
-				local tile = payload and findTileByCoords(payload.gridx, payload.gridz)
-				if tile then
-					UnlockFeedback.play(tile)
-				end
+if tileunlockRemote then
+	tileunlockRemote.OnClientEvent:Connect(function(payload)
+		inFlight = false
+		local success = payload and payload.success
+		local key = payload and (payload.gridx .. "_" .. payload.gridz)
+		if not success then
+			lastBlockedKey = key
+			debugutil.log("interaction", "warn", "unlock response blocked", payload or {})
+		else
+			lastBlockedKey = nil
+			debugutil.log("interaction", "state", "unlock response success", payload or {})
+			local tile = payload and findTileByCoords(payload.gridx, payload.gridz)
+			if tile then
+				UnlockFeedback.play(tile)
 			end
-		end)
-	end
+		end
+	end)
+end
+
+player.CharacterAdded:Connect(function()
+	playerGui = player:WaitForChild("PlayerGui")
+	ensureHighlights()
+	clearPending("character_respawn")
+	clearPulse()
+end)

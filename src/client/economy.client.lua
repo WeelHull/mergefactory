@@ -85,6 +85,8 @@ local function updateMachineLabel(model)
 	local multiplier = model:GetAttribute("cashMultiplier")
 	if typeof(multiplier) ~= "number" or multiplier < 1 then
 		multiplier = 1
+	elseif multiplier > 4 then
+		multiplier = 4
 	end
 	if not machineType or not tier then
 		return

@@ -1,5 +1,6 @@
 -- machine_intent server handler: routes machine intents to authoritative services.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -9,6 +10,8 @@ local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local MergeSystem = require(ServerScriptService.Server.mergesystem)
 local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
+local Inventory = require(ServerScriptService.Server.inventory)
+local MergeController = require(ServerScriptService.Server.mergecontroller)
 
 local TRACE = true
 local BOUND = false
@@ -168,6 +171,9 @@ local function handleDeleteIntent(player, payload, islandid)
 	MachineRegistry.UnbindTile(payload.machineId)
 	MachineRegistry.unregister(payload.machineId)
 	ctx.model:Destroy()
+	if machineType and tier then
+		Inventory.Grant(player.UserId, machineType, tier, 1)
+	end
 
 	debug.log("machine", "state", "deleted", {
 		machineId = payload.machineId,
@@ -304,12 +310,10 @@ local function onMachineIntent(player, payload)
 					reason = reason,
 				})
 				if canMerge then
-					local executed, execReason = MergeSystem.ExecuteMerge(relocatingId, machineId)
-					debug.log("merge", "state", "relocate_merge_executed", {
-						result = executed and "success" or tostring(execReason),
-						machineA = relocatingId,
-						machineB = machineId,
-					})
+					local targetModel = MachineRegistry.get(machineId)
+					local machineType = targetModel and targetModel:GetAttribute("machineType")
+					local tier = targetModel and targetModel:GetAttribute("tier")
+					MergeController.SendMergeOffer(player, relocatingId, machineId, machineType, tier)
 				else
 					debug.log("merge", "decision", "relocate_merge_denied", {
 						reason = reason,

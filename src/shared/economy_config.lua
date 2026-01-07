@@ -1,9 +1,9 @@
 local EconomyConfig = {}
 
-local DEFAULT_RATE_PER_TIER = 10 -- cash per second per tier for generator
-local DEFAULT_PRICE_PER_TIER = 100 -- base price per tier
-local TILE_BASE_PRICE = 75
-local TILE_STEP_PRICE = 50
+local DEFAULT_RATE_PER_TIER = 7 -- base cash per second per tier (before luck multiplier)
+local DEFAULT_PRICE_PER_TIER = 120 -- base price per tier
+local TILE_BASE_PRICE = 50
+local TILE_STEP_PRICE = 25
 
 local function demandMultiplier(cashPerSecond, weight)
 	local cps = math.max(0, tonumber(cashPerSecond) or 0)
@@ -11,8 +11,8 @@ local function demandMultiplier(cashPerSecond, weight)
 	if w < 0 then
 		w = 0
 	end
-	-- Aggressive growth: as income rises, prices scale superlinearly to slow progression.
-	-- Tiles use w=1 (power ~2.0), machines w=0.75 (power ~1.8).
+	-- Softer growth: modest scaling to avoid sharp spikes in progression.
+	-- Tiles use w=0.35 (power ~1.1), machines w=0.75 (power ~1.8).
 	local base = 1 + cps / 60
 	local power = 1.2 + 0.8 * w
 	return math.max(1, base ^ power)
@@ -35,7 +35,7 @@ function EconomyConfig.GetMachinePrice(machineType, tier, cashPerSecond)
 	local multiplier = demandMultiplier(cashPerSecond, 0.75)
 	if machineType == "generator" then
 		local t = math.max(1, tier)
-		local tierFactor = t ^ 2.1 -- steeper growth per tier to slow progression
+		local tierFactor = t ^ 2.6 -- steeper growth per tier to slow progression
 		local base = DEFAULT_PRICE_PER_TIER * t * tierFactor
 		return math.floor(base * multiplier)
 	end
@@ -48,7 +48,6 @@ function EconomyConfig.GetStoragePrice(machineType, tier, cashPerSecond, cash, m
 	end
 	local wealth = math.max(0, tonumber(cash) or 0)
 	local count = math.max(1, tonumber(machineCount) or 1)
-	local purchasePrice = EconomyConfig.GetMachinePrice(machineType, tier, cashPerSecond)
 	local pct
 	if count == 1 then
 		pct = 1
@@ -66,20 +65,19 @@ function EconomyConfig.GetStoragePrice(machineType, tier, cashPerSecond, cash, m
 		pct = 0.4
 	end
 	local feeFromCash = wealth * pct
-	-- ensure a baseline tied to machine value so fee isn't negligible when cash is low
-	local baseline = math.max(10, purchasePrice * 0.25)
-	return math.floor(math.max(baseline, feeFromCash))
+	return math.floor(feeFromCash)
 end
 
 function EconomyConfig.GetTilePrice(gridx, gridz, cashPerSecond)
 	if not gridx or not gridz then
 		return TILE_BASE_PRICE
 	end
-	-- Distance spike: farther tiles get exponentially more expensive.
+	-- Softer distance growth for a 19x19 grid (361 tiles).
 	local dist = math.abs(gridx - 1) + math.abs(gridz - 1)
-	local distanceFactor = (1 + dist) ^ 2.2
+	local distanceFactor = (1 + dist) ^ 1.15
 	local base = TILE_BASE_PRICE + dist * TILE_STEP_PRICE
-	local multiplier = demandMultiplier(cashPerSecond, 1)
+	-- Tiles scale weakly with income to avoid runaway prices.
+	local multiplier = demandMultiplier(cashPerSecond, 0.35)
 	return math.floor(base * distanceFactor * multiplier)
 end
 

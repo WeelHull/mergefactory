@@ -14,18 +14,13 @@ local mouse = player:GetMouse()
 
 local HIGHLIGHT_COLOR_VALID = Color3.fromRGB(80, 180, 80)
 
-local highlight = Instance.new("Highlight")
-highlight.FillTransparency = 1
-highlight.OutlineTransparency = 0
-highlight.OutlineColor = HIGHLIGHT_COLOR_VALID
-highlight.Enabled = false
-highlight.Adornee = nil
-highlight.Parent = PlayerGui
+local highlight
 
 local currentHovered
 local currentGridFolder
 local raycastParams = RaycastParams.new()
-raycastParams.FilterType = Enum.RaycastFilterType.Include
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.FilterDescendantsInstances = { player.Character }
 local hoverActive = false
 local clearedLogged = false
 local unexpectedLogged = false
@@ -33,14 +28,30 @@ local hasLoggedStateLock = false
 local placementBlockedLogged = false
 local machineBlockedLogged = false
 local machinesFolder = Workspace:WaitForChild("machines")
+local characterConn
+local function ensureHighlight()
+	if highlight and highlight.Parent then
+		return highlight
+	end
+	highlight = Instance.new("Highlight")
+	highlight.FillTransparency = 1
+	highlight.OutlineTransparency = 0
+	highlight.OutlineColor = HIGHLIGHT_COLOR_VALID
+	highlight.Enabled = false
+	highlight.Adornee = nil
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = PlayerGui
+	return highlight
+end
 
 local function clearHoverForMachine()
+	local hl = ensureHighlight()
 	if not currentHovered then
 		return
 	end
 	currentHovered = nil
-	highlight.Enabled = false
-	highlight.Adornee = nil
+	hl.Enabled = false
+	hl.Adornee = nil
 	State.ClearHoveredTile()
 	State.SetState("Idle", "over_machine")
 	clearedLogged = true
@@ -58,12 +69,13 @@ local function isOverMachine(inst)
 end
 
 local function ForceClearHover()
+	local hl = ensureHighlight()
 	if currentHovered then
 		debugutil.log("interaction", "state", "hover force-cleared", { reason = "external_cancel" })
 	end
 	currentHovered = nil
-	highlight.Enabled = false
-	highlight.Adornee = nil
+	hl.Enabled = false
+	hl.Adornee = nil
 	State.ClearHoveredTile()
 	State.SetState("Idle", "external_cancel")
 	hasLoggedStateLock = false
@@ -86,12 +98,13 @@ end
 destroyStrayHighlights()
 
 local function clearHighlight()
+	local hl = ensureHighlight()
 	if currentHovered then
 		debugutil.log("interaction", "state", "hover leave", { name = currentHovered.Name })
 	end
 	currentHovered = nil
-	highlight.Enabled = false
-	highlight.Adornee = nil
+	hl.Enabled = false
+	hl.Adornee = nil
 	State.ClearHoveredTile()
 	if not clearedLogged then
 		debugutil.log("interaction", "state", "hover cleared", { reason = "no valid hit" })
@@ -105,23 +118,23 @@ local function updateGridFolder()
 	local islandId = player:GetAttribute("islandid")
 	if not islandId then
 		currentGridFolder = nil
-		raycastParams.FilterDescendantsInstances = {}
+		raycastParams.FilterDescendantsInstances = { player.Character, machinesFolder }
 		return
 	end
 	local islandsFolder = workspace:FindFirstChild("islands")
 	if not islandsFolder then
 		currentGridFolder = nil
-		raycastParams.FilterDescendantsInstances = {}
+		raycastParams.FilterDescendantsInstances = { player.Character, machinesFolder }
 		return
 	end
 	local islandModel = islandsFolder:FindFirstChild("player_" .. tostring(islandId))
 	if not islandModel then
 		currentGridFolder = nil
-		raycastParams.FilterDescendantsInstances = {}
+		raycastParams.FilterDescendantsInstances = { player.Character, machinesFolder }
 		return
 	end
 	currentGridFolder = islandModel:FindFirstChild("grid")
-	raycastParams.FilterDescendantsInstances = currentGridFolder and { currentGridFolder } or {}
+	raycastParams.FilterDescendantsInstances = { player.Character, machinesFolder }
 end
 
 local function isValidHit(instance)
@@ -151,9 +164,10 @@ local function setHover(part)
 	if currentHovered == part then
 		return
 	end
+	local hl = ensureHighlight()
 	currentHovered = part
-	highlight.Adornee = part
-	highlight.Enabled = true
+	hl.Adornee = part
+	hl.Enabled = true
 	clearedLogged = false
 	debugutil.log("interaction", "state", "hover enter", { name = part.Name })
 	State.SetHoveredTile(part)
@@ -229,9 +243,16 @@ end
 
 local function onCharacterAdded()
 	clearHighlight()
+	currentGridFolder = nil
+	raycastParams.FilterDescendantsInstances = { player.Character, machinesFolder }
+	hoverActive = false
+	hasLoggedStateLock = false
+	clearedLogged = false
+	unexpectedLogged = false
+	placementBlockedLogged = false
+	machineBlockedLogged = false
+	updateGridFolder()
 end
-
-player.CharacterAdded:Connect(onCharacterAdded)
 
 local function activateHover()
 	if hoverActive then
@@ -246,6 +267,15 @@ local function activateHover()
 			return
 		end
 		handleMouseMove()
+	end)
+end
+
+if not characterConn then
+	characterConn = player.CharacterAdded:Connect(function()
+		onCharacterAdded()
+		if player:GetAttribute("islandid") ~= nil then
+			activateHover()
+		end
 	end)
 end
 

@@ -110,11 +110,11 @@ local function resolveMultiplier(params)
 	local m = params and params.cashMultiplier
 	if typeof(m) == "number" then
 		m = math.floor(m)
-		if m >= 1 and m <= 10 then
+		if m >= 1 and m <= 4 then
 			return m
 		end
 	end
-	return math.random(1, 10)
+	return math.random(1, 4)
 end
 
 function machinespawn.SpawnMachine(params)

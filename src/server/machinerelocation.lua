@@ -8,6 +8,7 @@ local gridregistry = require(ServerScriptService.Server.gridregistry)
 local machineregistry = require(ServerScriptService.Server.machineregistry)
 local placementpermission = require(ServerScriptService.Server.modules.placementpermission)
 local MergeSystem = require(ServerScriptService.Server.mergesystem)
+local MergeController = require(ServerScriptService.Server.mergecontroller)
 
 local machinerelocation = {}
 
@@ -136,16 +137,14 @@ function machinerelocation.Relocate(machineId, gridx, gridz, islandid, rotation)
 			reason = mergeReason,
 		})
 		if canMerge then
-			local executed, execReason = MergeSystem.ExecuteMerge(machineId, ctx.targetOccupantId)
-			debug.log("merge", "state", "relocate_merge_executed", {
-				source = machineId,
-				target = ctx.targetOccupantId,
-			})
-			debug.log("machine", "state", "relocate_aborted", {
-				reason = "merge_executed",
-				machineId = machineId,
-			})
-			return executed, execReason
+			local ownerPlayer = Players:GetPlayerByUserId(ctx.ownerUserId)
+			local targetModel = machineregistry.get(ctx.targetOccupantId)
+			local machineType = targetModel and targetModel:GetAttribute("machineType")
+			local tier = targetModel and targetModel:GetAttribute("tier")
+			if ownerPlayer then
+				MergeController.SendMergeOffer(ownerPlayer, machineId, ctx.targetOccupantId, machineType, tier)
+			end
+			return false, "merge_offer"
 		else
 			return false, "tile_occupied"
 		end
