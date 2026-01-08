@@ -12,6 +12,7 @@ local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(ServerScriptService.Server.inventory)
 local MergeController = require(ServerScriptService.Server.mergecontroller)
+local QuestSystem = require(ServerScriptService.Server.questsystem)
 
 local TRACE = true
 local BOUND = false
@@ -173,6 +174,7 @@ local function handleDeleteIntent(player, payload, islandid)
 	ctx.model:Destroy()
 	if machineType and tier then
 		Inventory.Grant(player.UserId, machineType, tier, 1)
+		QuestSystem.RecordMachineRemoval(player, machineType, tier, 1)
 	end
 
 	debug.log("machine", "state", "deleted", {

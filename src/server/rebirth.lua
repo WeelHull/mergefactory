@@ -10,6 +10,7 @@ local IslandController = require(ServerScriptService.Server.islandcontroller)
 local UnlockController = require(ServerScriptService.Server.unlockcontroller)
 local Economy = require(ServerScriptService.Server.economy)
 local RebirthConfig = require(ReplicatedStorage.Shared.rebirth_config)
+local QuestSystem = require(ServerScriptService.Server.questsystem)
 
 local Rebirth = {}
 
@@ -183,6 +184,7 @@ function Rebirth.Perform(player)
 	clearMachines(player)
 	resetIsland(player)
 	applyStarter(player)
+	QuestSystem.Reset(player)
 
 	st.rebirths += tokens
 	local multipliers = applyAttributes(player, st.rebirths)

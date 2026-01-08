@@ -15,6 +15,7 @@ local MergeController = require(ServerScriptService.Server.mergecontroller)
 local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(ServerScriptService.Server.inventory)
+local QuestSystem = require(ServerScriptService.Server.questsystem)
 
 local remote =
 	ReplicatedStorage
@@ -57,13 +58,13 @@ end
 local function ensurePaid(player, machineType, tier)
 	-- First attempt to consume server-side inventory grant (starter item).
 	if Inventory.Consume(player.UserId, machineType, tier, 1) then
-		return true
+		return true, "inventory"
 	end
 
 	local cps = player:GetAttribute("CashPerSecond") or 0
 	local price = EconomyConfig.GetMachinePrice(machineType, tier, cps)
 	if price <= 0 then
-		return true
+		return true, "free"
 	end
 
 	local spent = Economy.Spend(player, price)
@@ -75,10 +76,10 @@ local function ensurePaid(player, machineType, tier)
 			price = price,
 			cash = Economy.GetCash(player),
 		})
-		return false
+		return false, "insufficient"
 	end
 
-	return true
+	return true, "cash"
 end
 
 local function handleRelocate(player, payload, islandid)
@@ -227,11 +228,12 @@ remote.OnServerEvent:Connect(function(player, payload)
 		return
 	end
 
-	if not ensurePaid(player, machineType, tier) then
+	local paid, source = ensurePaid(player, machineType, tier)
+	if not paid then
 		return
 	end
 
-	MachineSpawn.SpawnMachine({
+	local spawned = MachineSpawn.SpawnMachine({
 		ownerUserId = player.UserId,
 		machineType = machineType,
 		tier = tier,
@@ -239,4 +241,7 @@ remote.OnServerEvent:Connect(function(player, payload)
 		gridz = gridz,
 		rotation = normalizeRotation(payload.rotation or 0),
 	})
+	if spawned then
+		QuestSystem.RecordMachine(player, machineType, tier)
+	end
 end)

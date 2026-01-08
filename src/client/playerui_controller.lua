@@ -27,6 +27,10 @@ local refs = {
 	cashFrame = nil,
 	cashAmountLabel = nil,
 	cashPerSecondLabel = nil,
+	menuButtons2 = nil,
+	questButton = nil,
+	questFrame = nil,
+	questCloseButton = nil,
 }
 
 local warnedMissing = false
@@ -144,10 +148,12 @@ local function ensureRefs()
 
 	if refs.playerUI then
 		refs.menuButtons = refs.menuButtons or refs.playerUI:FindFirstChild("menu_buttons")
+		refs.menuButtons2 = refs.menuButtons2 or refs.playerUI:FindFirstChild("menu_buttons_2")
 		refs.buildFrame = refs.buildFrame or refs.playerUI:FindFirstChild("build_frame")
 		refs.rebirthFrame = refs.rebirthFrame or refs.playerUI:FindFirstChild("rebirth_frame")
 		refs.settingsFrame = refs.settingsFrame or refs.playerUI:FindFirstChild("settings_frame")
 		refs.shopFrame = refs.shopFrame or refs.playerUI:FindFirstChild("shop_frame")
+		refs.questFrame = refs.questFrame or refs.playerUI:FindFirstChild("quest_frame")
 		refs.buildButton = refs.buildButton or (refs.menuButtons and refs.menuButtons:FindFirstChild("build_button") or nil)
 		if refs.menuButtons then
 			refs.rebirthButton = refs.rebirthButton or refs.menuButtons:FindFirstChild("rebirth_button")
@@ -155,6 +161,12 @@ local function ensureRefs()
 				or refs.menuButtons:FindFirstChild("setting_button")
 				or refs.menuButtons:FindFirstChild("settings_button")
 			refs.shopButton = refs.shopButton or refs.menuButtons:FindFirstChild("shop_button")
+		end
+		if refs.menuButtons2 and not refs.questButton then
+			refs.questButton = refs.menuButtons2:FindFirstChild("quest_button")
+		end
+		if refs.questFrame and not refs.questCloseButton then
+			refs.questCloseButton = refs.questFrame:FindFirstChild("close_menu", true)
 		end
 		refs.cashFrame = refs.cashFrame or refs.playerUI:FindFirstChild("cash_frame")
 		if refs.cashFrame then
@@ -231,6 +243,21 @@ end
 function PlayerUI.GetCloseButton()
 	ensureRefs()
 	return refs.closeButton
+end
+
+function PlayerUI.GetQuestButton()
+	ensureRefs()
+	return refs.questButton
+end
+
+function PlayerUI.GetQuestCloseButton()
+	ensureRefs()
+	return refs.questCloseButton
+end
+
+function PlayerUI.GetQuestFrame()
+	ensureRefs()
+	return refs.questFrame
 end
 
 function PlayerUI.IsBuildMenuVisible()
@@ -345,6 +372,15 @@ function PlayerUI.SetCashPerSecond(amount)
 	end
 end
 
+function PlayerUI.HideQuestMenu()
+	if not ensureRefs() then
+		return
+	end
+	if refs.questFrame and typeof(refs.questFrame.Visible) == "boolean" then
+		refs.questFrame.Visible = false
+	end
+end
+
 function PlayerUI.ShowBuildMenu()
 	if not ensureRefs() then
 		return
@@ -368,6 +404,7 @@ function PlayerUI.ShowMenuButtons()
 	if refs.buildFrame then
 		refs.buildFrame.Visible = false
 	end
+	PlayerUI.HideQuestMenu()
 end
 
 function PlayerUI.HideAllMenus(exceptFrame)
@@ -379,6 +416,7 @@ function PlayerUI.HideAllMenus(exceptFrame)
 		refs.settingsFrame,
 		refs.shopFrame,
 		refs.buildFrame,
+		refs.questFrame,
 	}
 	for _, frame in ipairs(targets) do
 		if frame and typeof(frame.Visible) == "boolean" then
@@ -404,6 +442,31 @@ function PlayerUI.ToggleRebirthMenu()
 	frame.Visible = shouldShow
 end
 
+function PlayerUI.ToggleQuestMenu()
+	if not ensureRefs() then
+		return
+	end
+	local frame = refs.questFrame
+	if not frame or typeof(frame.Visible) ~= "boolean" then
+		return
+	end
+	local shouldShow = not frame.Visible
+	if shouldShow then
+		local buildWasVisible = refs.buildFrame and refs.buildFrame.Visible
+		local menuButtonsVisible = refs.menuButtons and refs.menuButtons.Visible
+		PlayerUI.HideAllMenus(frame)
+		if buildWasVisible and refs.buildFrame then
+			refs.buildFrame.Visible = true
+		end
+		if menuButtonsVisible and refs.menuButtons then
+			refs.menuButtons.Visible = true
+		end
+		frame.Visible = true
+	else
+		frame.Visible = false
+	end
+end
+
 function PlayerUI.ToggleSettingsMenu()
 	if not ensureRefs() then
 		return
@@ -426,8 +489,12 @@ function PlayerUI.ToggleShopMenu()
 		return
 	end
 	local shouldShow = not frame.Visible
-	PlayerUI.HideAllMenus(shouldShow and frame or nil)
-	frame.Visible = shouldShow
+	if shouldShow then
+		PlayerUI.HideAllMenus(frame)
+		frame.Visible = true
+	else
+		frame.Visible = false
+	end
 end
 
 return PlayerUI

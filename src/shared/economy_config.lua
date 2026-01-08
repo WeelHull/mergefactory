@@ -11,11 +11,12 @@ local function demandMultiplier(cashPerSecond, weight)
 	if w < 0 then
 		w = 0
 	end
-	-- Softer growth: modest scaling to avoid sharp spikes in progression.
-	-- Tiles use w=0.35 (power ~1.1), machines w=0.75 (power ~1.8).
-	local base = 1 + cps / 60
-	local power = 1.2 + 0.8 * w
-	return math.max(1, base ^ power)
+	-- Softer growth: clamp demand so luck spikes don't explode prices.
+	local base = 1 + cps / 80
+	local power = 1 + 0.5 * w
+	local mult = math.max(1, base ^ power)
+	-- Hard cap to keep early-game prices sane.
+	return math.min(mult, 5)
 end
 
 function EconomyConfig.GetRate(machineType, tier)

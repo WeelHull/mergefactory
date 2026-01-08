@@ -4,6 +4,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local debug = require(ServerScriptService.Server.debugutil)
 local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local machinespawn = require(ServerScriptService.Server.machinespawn)
+local QuestSystem = require(ServerScriptService.Server.questsystem)
 
 local MergeSystem = {}
 local MAX_TIER = 10
@@ -175,6 +176,10 @@ function MergeSystem.ExecuteMerge(machineAId, machineBId)
 		result = spawned,
 		newMachineId = newId,
 	})
+
+	if spawned then
+		QuestSystem.RecordMachine(ownerId, machineType, newTier)
+	end
 
 	return spawned, newId
 end

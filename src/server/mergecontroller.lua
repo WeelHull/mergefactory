@@ -26,7 +26,7 @@ local function computeMergePrice(machineType, tier, player)
 	local nextTier = (tier or 0) + 1
 	local cps = player and player:GetAttribute("CashPerSecond") or 0
 	local basePrice = EconomyConfig.GetMachinePrice(machineType, nextTier, cps)
-	local discounted = math.max(0, math.floor(basePrice * 0.25))
+	local discounted = math.max(0, math.floor(basePrice * 0.8))
 	return discounted, nextTier
 end
 

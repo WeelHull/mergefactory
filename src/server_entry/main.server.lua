@@ -11,6 +11,7 @@ local gridregistry = require(game.ServerScriptService.Server.gridregistry)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(game.ServerScriptService.Server.inventory)
 local Rebirth = require(game.ServerScriptService.Server.rebirth)
+local QuestSystem = require(game.ServerScriptService.Server.questsystem)
 require(game.ServerScriptService.Server.playerlifecycle)
 
 local START_GRIDX = 1
@@ -159,6 +160,7 @@ Players.PlayerAdded:Connect(ensureStartUnlocked)
 for _, player in ipairs(Players:GetPlayers()) do
 	task.defer(ensureLeaderstats, player)
 end
+QuestSystem.Init()
 
 -- client unlock intent handler (server-authoritative)
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
