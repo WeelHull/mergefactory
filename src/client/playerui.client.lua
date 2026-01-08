@@ -11,6 +11,14 @@ local PlayerUI = require(script.Parent.playerui_controller)
 
 local selectionConn
 
+local function connectToggle(button, action, name)
+	if not button then
+		debugutil.log("ui", "warn", "menu_button_missing", { name = name })
+		return
+	end
+	button.Activated:Connect(action)
+end
+
 local function highlightCurrent()
 	local cur = Selection.GetCurrent()
 	if cur then
@@ -70,8 +78,13 @@ else
 	debugutil.log("ui", "warn", "build_button_missing", {})
 end
 
+connectToggle(PlayerUI.GetRebirthButton(), PlayerUI.ToggleRebirthMenu, "rebirth_button")
+connectToggle(PlayerUI.GetSettingsButton(), PlayerUI.ToggleSettingsMenu, "setting_button")
+connectToggle(PlayerUI.GetShopButton(), PlayerUI.ToggleShopMenu, "shop_button")
+
 local function closeBuild(trigger)
 	PlayerUI.ShowMenuButtons()
+	PurchasePrompt.Hide("close_build")
 	local cancelled = PlacementMode.RequestCancel()
 	debugutil.log("ui", cancelled and "state" or "warn", "build_close_request", {
 		trigger = trigger,

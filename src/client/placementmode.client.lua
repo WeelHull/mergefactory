@@ -349,10 +349,32 @@ local function onWheelAction(actionName, inputState, inputObject)
 	if inputObject.UserInputType ~= Enum.UserInputType.MouseWheel then
 		return Enum.ContextActionResult.Pass
 	end
+	local currentIndex = Selection.GetIndex()
+	local function selectNextOwned(dir)
+		local count = Selection.GetCount()
+		if count == 0 then
+			return Selection.GetCurrent()
+		end
+		for step = 1, count do
+			local idx
+			if dir > 0 then
+				idx = ((currentIndex + step - 1) % count) + 1
+			else
+				idx = ((currentIndex - step - 1) % count) + 1
+			end
+			local candidate = Selection.GetAt(idx)
+			if candidate and Inventory.Has(candidate.machineType, candidate.tier, 1) then
+				Selection.SetIndex(idx)
+				return candidate
+			end
+		end
+		return Selection.GetCurrent()
+	end
+
 	if inputObject.Position.Z > 0 then
-		Selection.Next()
+		selectNextOwned(1)
 	elseif inputObject.Position.Z < 0 then
-		Selection.Prev()
+		selectNextOwned(-1)
 	end
 	local current = Selection.GetCurrent()
 	if placementPayload and placementPayload.kind == "machine" and current then
@@ -769,6 +791,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if input.KeyCode == Enum.KeyCode.E then
 		if PlayerUI.IsBuildMenuVisible() or stateModule.IsActive() then
 			PlayerUI.ShowMenuButtons()
+			PurchasePrompt.Hide("toggle_key_E")
 			cancel(input)
 			return
 		end

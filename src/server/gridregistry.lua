@@ -266,6 +266,27 @@ function gridregistry.setUnlocked(islandid, gridx, gridz, value)
 	return true
 end
 
+function gridregistry.resetIsland(islandid)
+	debug.log("gridregistry", "decision", "resetIsland called", {
+		islandid = islandid,
+	})
+	local islandGrid = registry[tostring(islandid)]
+	if not islandGrid then
+		return false
+	end
+	for _, row in pairs(islandGrid) do
+		for _, entry in pairs(row) do
+			entry.unlocked = false
+			if entry.part and entry.part:IsA("BasePart") then
+				entry.part:SetAttribute("unlocked", false)
+				applyVisual(entry.part, false)
+			end
+		end
+	end
+	debug.log("gridregistry", "state", "island reset", { islandid = islandid })
+	return true
+end
+
 buildRegistry()
 
 return gridregistry

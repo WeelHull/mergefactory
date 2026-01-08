@@ -12,18 +12,20 @@ local playerState = {} -- player -> { cash = number, perSecond = number, running
 
 local function computePerSecond(player)
 	local total = 0
+	local prodMult = player:GetAttribute("RebirthProdMult") or 1
+	local incomeMult = player:GetAttribute("RebirthIncomeMult") or 1
 	for _, model in ipairs(MachineRegistry.getMachinesForOwner(player.UserId)) do
 		local machineType = model:GetAttribute("machineType")
 		local tier = model:GetAttribute("tier")
 		if machineType and tier then
-			local multiplier = model:GetAttribute("cashMultiplier")
-			if typeof(multiplier) ~= "number" or multiplier < 1 then
-				multiplier = 1
+			local machineMult = model:GetAttribute("cashMultiplier")
+			if typeof(machineMult) ~= "number" or machineMult < 1 then
+				machineMult = 1
 			end
-			total += EconomyConfig.GetRate(machineType, tier) * multiplier
+			total += EconomyConfig.GetRate(machineType, tier) * machineMult
 		end
 	end
-	return total
+	return total * prodMult * incomeMult
 end
 
 local function updateAttributes(player, state)
@@ -96,6 +98,34 @@ function Economy.Spend(player, amount)
 	state.cash -= amount
 	updateAttributes(player, state)
 	return true
+end
+
+function Economy.Grant(player, amount)
+	local state = playerState[player]
+	if not state or not amount or amount <= 0 then
+		return false
+	end
+	state.cash += amount
+	updateAttributes(player, state)
+	return true
+end
+
+function Economy.Reset(player)
+	if not player then
+		return
+	end
+	local state = playerState[player]
+	if not state then
+		Economy.Start(player)
+		state = playerState[player]
+	end
+	if not state then
+		return
+	end
+	state.cash = 0
+	state.perSecond = 0
+	state.last = os.clock()
+	updateAttributes(player, state)
 end
 
 Players.PlayerRemoving:Connect(function(player)

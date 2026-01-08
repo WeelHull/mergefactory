@@ -10,10 +10,44 @@ local Economy = require(game.ServerScriptService.Server.economy)
 local gridregistry = require(game.ServerScriptService.Server.gridregistry)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(game.ServerScriptService.Server.inventory)
+local Rebirth = require(game.ServerScriptService.Server.rebirth)
+require(game.ServerScriptService.Server.playerlifecycle)
 
 local START_GRIDX = 1
 local START_GRIDZ = 1
 local HRP_TIMEOUT = 5
+local function ensureLeaderstats(player)
+	if not player then
+		return
+	end
+	local ls = player:FindFirstChild("leaderstats")
+	if not ls then
+		ls = Instance.new("Folder")
+		ls.Name = "leaderstats"
+		ls.Parent = player
+	end
+
+	local function ensureInt(name, initial)
+		local val = ls:FindFirstChild(name)
+		if not val then
+			val = Instance.new("IntValue")
+			val.Name = name
+			val.Parent = ls
+		end
+		val.Value = math.floor(initial or 0)
+		return val
+	end
+
+	local cashValue = ensureInt("Cash", player:GetAttribute("Cash"))
+	local rebirthValue = ensureInt("Rebirths", player:GetAttribute("Rebirths"))
+
+	player:GetAttributeChangedSignal("Cash"):Connect(function()
+		cashValue.Value = math.floor(player:GetAttribute("Cash") or 0)
+	end)
+	player:GetAttributeChangedSignal("Rebirths"):Connect(function()
+		rebirthValue.Value = math.floor(player:GetAttribute("Rebirths") or 0)
+	end)
+end
 
 -- Instant respawn
 Players.RespawnTime = 0
@@ -64,6 +98,8 @@ local function ensureStartUnlocked(player)
 	debugutil.log("lifecycle", "state", "player joined", {
 		userid = player.UserId,
 	})
+
+	ensureLeaderstats(player)
 
 	-- Wait for island assignment from islandcontroller
 	local islandid
@@ -120,6 +156,9 @@ local function ensureStartUnlocked(player)
 end
 
 Players.PlayerAdded:Connect(ensureStartUnlocked)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.defer(ensureLeaderstats, player)
+end
 
 -- client unlock intent handler (server-authoritative)
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
@@ -127,6 +166,8 @@ local remotes = sharedFolder:WaitForChild("remotes")
 local tileunlockEvent = remotes:WaitForChild("tileunlock")
 local canPlaceFunction = remotes:WaitForChild("canplaceontile")
 local spendCashFn = remotes:FindFirstChild("spend_cash") or Instance.new("RemoteFunction")
+local rebirthFn = remotes:FindFirstChild("rebirth_request") or Instance.new("RemoteFunction")
+local shopCoinsFn = remotes:FindFirstChild("shop_coins_purchase") or Instance.new("RemoteFunction")
 spendCashFn.Name = "spend_cash"
 spendCashFn.Parent = remotes
 spendCashFn.OnServerInvoke = function(player, amount)
@@ -135,6 +176,38 @@ spendCashFn.OnServerInvoke = function(player, amount)
 		requested = amount,
 	})
 	return false
+end
+rebirthFn.Name = "rebirth_request"
+rebirthFn.Parent = remotes
+rebirthFn.OnServerInvoke = function(player, payload)
+	local action = type(payload) == "table" and payload.action or "preview"
+	if action == "execute" then
+		return Rebirth.Perform(player)
+	end
+	return Rebirth.Preview(player)
+end
+shopCoinsFn.Name = "shop_coins_purchase"
+shopCoinsFn.Parent = remotes
+shopCoinsFn.OnServerInvoke = function(player, payload)
+	local stamp = os.clock()
+	local minutes = type(payload) == "table" and tonumber(payload.minutes) or 15
+	local cps = player and player:GetAttribute("CashPerSecond") or 0
+	local durationSeconds = math.max(0, math.floor(minutes * 60))
+	local amount = math.max(0, math.floor(cps * durationSeconds))
+	local granted = Economy.Grant(player, amount)
+	debugutil.log("shop", granted and "state" or "warn", "coins_purchase", {
+		userid = player and player.UserId,
+		cps = cps,
+		minutes = minutes,
+		amount = amount,
+		granted = granted,
+		stamp = stamp,
+	})
+	return {
+		success = granted,
+		amount = amount,
+		stamp = stamp,
+	}
 end
 
 local function onTileUnlock(player, gridx, gridz)
@@ -157,7 +230,8 @@ local function onTileUnlock(player, gridx, gridz)
 
 	local tileEntry = gridregistry.getTile(player:GetAttribute("islandid"), gx, gz)
 	local cps = player:GetAttribute("CashPerSecond") or 0
-	local price = EconomyConfig.GetTilePrice(gx, gz, cps)
+	local discount = player:GetAttribute("RebirthTileDiscount") or 0
+	local price = EconomyConfig.GetTilePrice(gx, gz, cps, discount)
 	if tileEntry and tileEntry.part then
 		tileEntry.part:SetAttribute("price", price)
 	end

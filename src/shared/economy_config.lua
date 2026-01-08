@@ -68,7 +68,7 @@ function EconomyConfig.GetStoragePrice(machineType, tier, cashPerSecond, cash, m
 	return math.floor(feeFromCash)
 end
 
-function EconomyConfig.GetTilePrice(gridx, gridz, cashPerSecond)
+function EconomyConfig.GetTilePrice(gridx, gridz, cashPerSecond, tileDiscount)
 	if not gridx or not gridz then
 		return TILE_BASE_PRICE
 	end
@@ -78,7 +78,13 @@ function EconomyConfig.GetTilePrice(gridx, gridz, cashPerSecond)
 	local base = TILE_BASE_PRICE + dist * TILE_STEP_PRICE
 	-- Tiles scale weakly with income to avoid runaway prices.
 	local multiplier = demandMultiplier(cashPerSecond, 0.35)
-	return math.floor(base * distanceFactor * multiplier)
+	local discount = math.clamp(tonumber(tileDiscount) or 0, 0, 0.95)
+	local price = math.floor(base * distanceFactor * multiplier)
+	price = math.floor(price * (1 - discount))
+	if price < 0 then
+		price = 0
+	end
+	return price
 end
 
 return EconomyConfig

@@ -112,6 +112,13 @@ function hidePrompt()
 	currentOffer = nil
 end
 
+local function clearSelection(reason)
+	local api = _G._machineInteractionAPI
+	if api and api.ClearSelection then
+		api.ClearSelection(reason)
+	end
+end
+
 local function showPrompt(offer)
 	if not resolveGui() then
 		return
@@ -155,9 +162,11 @@ function handleDecision(action)
 
 	if result.reason == "insufficient_funds" then
 		Notifier.Insufficient()
+		clearSelection("merge_insufficient")
 	elseif result.reason == "cancelled" then
 		PlacementMode.RequestCancel()
 		MachineInteractionState.SetRelocating(false, "merge_cancelled")
+		clearSelection("merge_cancelled")
 	end
 	hidePrompt()
 end

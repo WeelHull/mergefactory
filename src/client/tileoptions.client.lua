@@ -168,7 +168,8 @@ local function updatePrice(tile, gridx, gridz)
 		return
 	end
 	local cps = player:GetAttribute("CashPerSecond") or 0
-	local price = EconomyConfig.GetTilePrice(gridx, gridz, cps)
+	local discount = player:GetAttribute("RebirthTileDiscount") or 0
+	local price = EconomyConfig.GetTilePrice(gridx, gridz, cps, discount)
 	if tile and tile:IsA("BasePart") then
 		tile:SetAttribute("price", price)
 	end
@@ -205,7 +206,8 @@ local function startCountdown(tile, gridx, gridz)
 		end
 		local cps = player:GetAttribute("CashPerSecond") or 0
 		local cash = player:GetAttribute("Cash") or 0
-		local price = EconomyConfig.GetTilePrice(gridx, gridz, cps)
+		local discount = player:GetAttribute("RebirthTileDiscount") or 0
+		local price = EconomyConfig.GetTilePrice(gridx, gridz, cps, discount)
 		if tile and tile:IsA("BasePart") then
 			tile:SetAttribute("price", price)
 		end

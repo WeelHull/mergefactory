@@ -302,11 +302,12 @@ local function clearHover()
 	end
 end
 
-	local function clearSelected()
-		if currentSelected then
-			logState("deselect", {
-				machine = currentSelected:GetFullName(),
-			})
+local function clearSelected(reason)
+	if currentSelected then
+		logState("deselect", {
+			machine = currentSelected:GetFullName(),
+			reason = reason,
+		})
 	end
 	currentSelected = nil
 	if selectedHighlight then
@@ -314,7 +315,7 @@ end
 		selectedHighlight.Parent = nil
 	end
 	MachineInteractionState.SetActive(false)
-	MachineInteractionState.SetRelocating(false)
+	MachineInteractionState.SetRelocating(false, reason)
 	if editOptions then
 		editOptions.Enabled = false
 		editOptions.Adornee = nil
@@ -357,14 +358,14 @@ local function setHover(machine)
 	end
 end
 
-	local function setSelected(machine)
-		if machine == currentSelected then
-			updateDeleteCostLabel(currentSelected)
-			return
-		end
+local function setSelected(machine)
+	if machine == currentSelected then
+		updateDeleteCostLabel(currentSelected)
+		return
+	end
 
-		clearSelected()
-		currentSelected = machine
+	clearSelected("new_selection")
+	currentSelected = machine
 	local h = ensureSelectedHighlight()
 	h.Adornee = machine
 	h.Parent = machine
@@ -393,13 +394,22 @@ end
 				machine = machine:GetFullName(),
 			})
 		end
-			updateDeleteCostLabel(machine)
-		end
+		updateDeleteCostLabel(machine)
 	end
+end
 
 function MachineInteraction.IsActive()
 	return currentSelected ~= nil
 end
+
+function MachineInteraction.ClearSelection(reason)
+	clearHover()
+	clearSelected(reason or "external_clear")
+end
+
+_G._machineInteractionAPI = {
+	ClearSelection = MachineInteraction.ClearSelection,
+}
 
 local function sendSelect(machine)
 	local gridx, gridz = resolveGrid(machine)

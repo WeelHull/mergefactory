@@ -24,6 +24,14 @@ function Selection.GetCurrent()
 	return items[index]
 end
 
+function Selection.GetAt(idx)
+	if typeof(idx) ~= "number" or #items == 0 then
+		return nil
+	end
+	local clamped = math.clamp(math.floor(idx), 1, #items)
+	return items[clamped]
+end
+
 function Selection.GetIndex()
 	return index
 end
@@ -77,6 +85,19 @@ function Selection.SetTier(tier)
 		return Selection.GetCurrent()
 	end
 	local clamped = math.clamp(tier, 1, #items)
+	if clamped == index then
+		return Selection.GetCurrent()
+	end
+	index = clamped
+	fireChanged()
+	return Selection.GetCurrent()
+end
+
+function Selection.SetIndex(idx)
+	if #items == 0 then
+		return Selection.GetCurrent()
+	end
+	local clamped = math.clamp(math.floor(idx), 1, #items)
 	if clamped == index then
 		return Selection.GetCurrent()
 	end

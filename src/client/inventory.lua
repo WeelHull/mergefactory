@@ -53,6 +53,12 @@ function Inventory.Consume(machineType, tier, amount)
 	return true
 end
 
+function Inventory.Reset()
+	counts = {}
+	seeded = false
+	fire("generator", 1)
+end
+
 function Inventory.ConnectChanged(fn)
 	return changedEvent.Event:Connect(fn)
 end

@@ -3,6 +3,8 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local Notifier = require(script.Parent.notifier)
+
 local PurchasePrompt = {}
 
 local gui
@@ -15,6 +17,7 @@ local robuxButton
 local cancelButton
 local busy = false
 local pendingCallback
+local currentPrice = 0
 
 local function forceCloseMergePrompt()
 	local mg = playerGui:FindFirstChild("merge_prompt")
@@ -62,6 +65,15 @@ local function finish(result)
 		frame.Visible = false
 	end
 	busy = false
+	currentPrice = 0
+end
+
+local function hasSufficientFunds()
+	if currentPrice <= 0 then
+		return true
+	end
+	local cash = player:GetAttribute("Cash") or 0
+	return cash >= currentPrice
 end
 
 local function ensureUI()
@@ -101,6 +113,10 @@ local function ensureUI()
 	frame.Visible = false
 
 	coinButton.Activated:Connect(function()
+		if not hasSufficientFunds() then
+			Notifier.Insufficient()
+			return
+		end
 		finish({ accepted = true, method = "coins" })
 	end)
 
@@ -122,20 +138,24 @@ function PurchasePrompt.Prompt(machineType, tier, price, callback)
 	if busy then
 		finish({ accepted = false, method = "replaced" })
 	end
+	currentPrice = tonumber(price) or 0
 	busy = true
 	pendingCallback = callback
 	if messageLabel then
 		local t = tonumber(tier) or 0
-		local p = tonumber(price) or 0
-		if p > 0 then
-			messageLabel.Text = string.format("You have 0 of Tier %d. Purchase for %s C$ to place?", t, formatCompact(p))
+		if currentPrice > 0 then
+			messageLabel.Text = string.format(
+				"You have 0 of Tier %d. Purchase for %s C$ to place?",
+				t,
+				formatCompact(currentPrice)
+			)
 		else
 			messageLabel.Text = string.format("You have 0 of Tier %d. Purchase one to place?", t)
 		end
 	end
 	if coinsCostLabel and coinsCostLabel:IsA("TextLabel") then
-		if price and price > 0 then
-			coinsCostLabel.Text = formatCompact(price) .. " C$"
+		if currentPrice > 0 then
+			coinsCostLabel.Text = formatCompact(currentPrice) .. " C$"
 		else
 			coinsCostLabel.Text = "--"
 		end
@@ -150,6 +170,22 @@ function PurchasePrompt.Prompt(machineType, tier, price, callback)
 		frame.Visible = true
 	end
 	forceCloseMergePrompt()
+end
+
+function PurchasePrompt.Hide(reason)
+	if busy then
+		finish({ accepted = false, method = reason or "cancel" })
+		return
+	end
+	-- still close any visible UI even if not busy
+	if gui then
+		gui.Enabled = false
+	end
+	if frame then
+		frame.Visible = false
+	end
+	currentPrice = 0
+	pendingCallback = nil
 end
 
 return PurchasePrompt

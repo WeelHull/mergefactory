@@ -16,6 +16,12 @@ local refs = {
 	closeButton = nil,
 	rotationOption = nil,
 	rotationButton = nil,
+	rebirthButton = nil,
+	settingsButton = nil,
+	shopButton = nil,
+	rebirthFrame = nil,
+	settingsFrame = nil,
+	shopFrame = nil,
 	tierButtons = nil,
 	tierAmounts = nil,
 	cashFrame = nil,
@@ -139,7 +145,17 @@ local function ensureRefs()
 	if refs.playerUI then
 		refs.menuButtons = refs.menuButtons or refs.playerUI:FindFirstChild("menu_buttons")
 		refs.buildFrame = refs.buildFrame or refs.playerUI:FindFirstChild("build_frame")
+		refs.rebirthFrame = refs.rebirthFrame or refs.playerUI:FindFirstChild("rebirth_frame")
+		refs.settingsFrame = refs.settingsFrame or refs.playerUI:FindFirstChild("settings_frame")
+		refs.shopFrame = refs.shopFrame or refs.playerUI:FindFirstChild("shop_frame")
 		refs.buildButton = refs.buildButton or (refs.menuButtons and refs.menuButtons:FindFirstChild("build_button") or nil)
+		if refs.menuButtons then
+			refs.rebirthButton = refs.rebirthButton or refs.menuButtons:FindFirstChild("rebirth_button")
+			refs.settingsButton = refs.settingsButton
+				or refs.menuButtons:FindFirstChild("setting_button")
+				or refs.menuButtons:FindFirstChild("settings_button")
+			refs.shopButton = refs.shopButton or refs.menuButtons:FindFirstChild("shop_button")
+		end
 		refs.cashFrame = refs.cashFrame or refs.playerUI:FindFirstChild("cash_frame")
 		if refs.cashFrame then
 			refs.cashAmountLabel = refs.cashAmountLabel or refs.cashFrame:FindFirstChild("cash_amount") or refs.cashFrame:FindFirstChildWhichIsA("TextLabel")
@@ -195,6 +211,21 @@ end
 function PlayerUI.GetBuildButton()
 	ensureRefs()
 	return refs.buildButton
+end
+
+function PlayerUI.GetRebirthButton()
+	ensureRefs()
+	return refs.rebirthButton
+end
+
+function PlayerUI.GetSettingsButton()
+	ensureRefs()
+	return refs.settingsButton
+end
+
+function PlayerUI.GetShopButton()
+	ensureRefs()
+	return refs.shopButton
 end
 
 function PlayerUI.GetCloseButton()
@@ -318,6 +349,7 @@ function PlayerUI.ShowBuildMenu()
 	if not ensureRefs() then
 		return
 	end
+	PlayerUI.HideAllMenus(refs.buildFrame)
 	if refs.menuButtons then
 		refs.menuButtons.Visible = false
 	end
@@ -336,6 +368,66 @@ function PlayerUI.ShowMenuButtons()
 	if refs.buildFrame then
 		refs.buildFrame.Visible = false
 	end
+end
+
+function PlayerUI.HideAllMenus(exceptFrame)
+	if not ensureRefs() then
+		return
+	end
+	local targets = {
+		refs.rebirthFrame,
+		refs.settingsFrame,
+		refs.shopFrame,
+		refs.buildFrame,
+	}
+	for _, frame in ipairs(targets) do
+		if frame and typeof(frame.Visible) == "boolean" then
+			if exceptFrame and frame == exceptFrame then
+				-- leave as-is
+			else
+				frame.Visible = false
+			end
+		end
+	end
+end
+
+function PlayerUI.ToggleRebirthMenu()
+	if not ensureRefs() then
+		return
+	end
+	local frame = refs.rebirthFrame
+	if not frame or typeof(frame.Visible) ~= "boolean" then
+		return
+	end
+	local shouldShow = not frame.Visible
+	PlayerUI.HideAllMenus(shouldShow and frame or nil)
+	frame.Visible = shouldShow
+end
+
+function PlayerUI.ToggleSettingsMenu()
+	if not ensureRefs() then
+		return
+	end
+	local frame = refs.settingsFrame
+	if not frame or typeof(frame.Visible) ~= "boolean" then
+		return
+	end
+	local shouldShow = not frame.Visible
+	PlayerUI.HideAllMenus(shouldShow and frame or nil)
+	frame.Visible = shouldShow
+end
+
+function PlayerUI.ToggleShopMenu()
+	if not ensureRefs() then
+		return
+	end
+	local frame = refs.shopFrame
+	if not frame or typeof(frame.Visible) ~= "boolean" then
+		return
+	end
+	local shouldShow = not frame.Visible
+	PlayerUI.HideAllMenus(shouldShow and frame or nil)
+	frame.Visible = shouldShow
 end
 
 return PlayerUI

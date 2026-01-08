@@ -82,16 +82,18 @@ local function updateMachineLabel(model)
 	end
 	local machineType = model:GetAttribute("machineType")
 	local tier = model:GetAttribute("tier")
-	local multiplier = model:GetAttribute("cashMultiplier")
-	if typeof(multiplier) ~= "number" or multiplier < 1 then
-		multiplier = 1
-	elseif multiplier > 4 then
-		multiplier = 4
+	local machineMult = model:GetAttribute("cashMultiplier")
+	if typeof(machineMult) ~= "number" or machineMult < 1 then
+		machineMult = 1
+	elseif machineMult > 4 then
+		machineMult = 4
 	end
 	if not machineType or not tier then
 		return
 	end
-	local rate = EconomyConfig.GetRate(machineType, tier) * multiplier
+	local prodMult = player:GetAttribute("RebirthProdMult") or 1
+	local incomeMult = player:GetAttribute("RebirthIncomeMult") or 1
+	local rate = EconomyConfig.GetRate(machineType, tier) * machineMult * prodMult * incomeMult
 	local billboard = model:FindFirstChildWhichIsA("BillboardGui", true)
 	if not billboard then
 		return
@@ -106,7 +108,7 @@ local function updateMachineLabel(model)
 	end
 	local multiplierLabel = desc:FindFirstChild("cash_multiplier")
 	if multiplierLabel and multiplierLabel:IsA("TextLabel") then
-		multiplierLabel.Text = "Multiplier: x" .. tostring(multiplier)
+		multiplierLabel.Text = "Multiplier: x" .. tostring(machineMult)
 	end
 	startProgressLoop(model)
 end
@@ -145,8 +147,22 @@ local function initMachinesWatcher()
 	end)
 end
 
+local function refreshAllMachineLabels()
+	local machines = Workspace:FindFirstChild("machines")
+	if not machines then
+		return
+	end
+	for _, child in ipairs(machines:GetChildren()) do
+		if child:IsA("Model") then
+			updateMachineLabel(child)
+		end
+	end
+end
+
 player:GetAttributeChangedSignal("Cash"):Connect(updateCash)
 player:GetAttributeChangedSignal("CashPerSecond"):Connect(updateCashPerSecond)
+player:GetAttributeChangedSignal("RebirthProdMult"):Connect(refreshAllMachineLabels)
+player:GetAttributeChangedSignal("RebirthIncomeMult"):Connect(refreshAllMachineLabels)
 updateCash()
 updateCashPerSecond()
 initMachinesWatcher()
