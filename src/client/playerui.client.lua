@@ -8,6 +8,7 @@ local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local PlacementMode = require(script.Parent.placementmode_state)
 local Selection = require(script.Parent.placement_selection)
 local PlayerUI = require(script.Parent.playerui_controller)
+local Players = game:GetService("Players")
 
 local selectionConn
 
@@ -81,6 +82,51 @@ end
 connectToggle(PlayerUI.GetRebirthButton(), PlayerUI.ToggleRebirthMenu, "rebirth_button")
 connectToggle(PlayerUI.GetSettingsButton(), PlayerUI.ToggleSettingsMenu, "setting_button")
 connectToggle(PlayerUI.GetShopButton(), PlayerUI.ToggleShopMenu, "shop_button")
+connectToggle(PlayerUI.GetSettingsCloseButton(), function()
+	PlayerUI.ToggleSettingsMenu()
+end, "settings_close_button")
+
+local function bindQuestButton()
+	local btn = PlayerUI.GetQuestButton()
+	if not btn or not btn.Activated then
+		debugutil.log("ui", "warn", "quest_button_missing", {})
+		return
+	end
+	if btn:GetAttribute("quest_bound") then
+		return
+	end
+	btn:SetAttribute("quest_bound", true)
+	btn.Active = true
+	btn.AutoButtonColor = true
+	btn.Selectable = true
+	btn.Activated:Connect(function()
+		-- Ensure placement mode stops when leaving build/entering quests.
+		PlacementMode.RequestCancel()
+		PurchasePrompt.Hide("quest_toggle")
+		PlayerUI.ToggleQuestMenu()
+	end)
+end
+
+bindQuestButton()
+
+local function bindShopClose()
+	local btn = PlayerUI.GetShopCloseButton()
+	if not btn or not btn.Activated then
+		return
+	end
+	if btn:GetAttribute("shop_close_bound") then
+		return
+	end
+	btn:SetAttribute("shop_close_bound", true)
+	btn.Activated:Connect(function()
+		local frame = PlayerUI.GetShopFrame and PlayerUI.GetShopFrame() or nil
+		if frame and typeof(frame.Visible) == "boolean" then
+			frame.Visible = false
+		end
+	end)
+end
+
+bindShopClose()
 
 local function closeBuild(trigger)
 	PlayerUI.ShowMenuButtons()
@@ -149,3 +195,13 @@ if rotationButton then
 else
 	debugutil.log("ui", "warn", "rotation_button_missing", {})
 end
+
+Players.LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+	if child.Name == "PlayerUI" then
+		task.defer(bindQuestButton)
+		task.defer(bindShopClose)
+	end
+end)
+
+bindQuestButton()
+bindShopClose()

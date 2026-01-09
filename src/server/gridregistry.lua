@@ -160,6 +160,8 @@ local function buildRegistry()
 						part = entry.part,
 						unlocked = entry.unlocked,
 						price = price,
+						gridx = entry.gridx,
+						gridz = entry.gridz,
 					}
 					added += 1
 				end
@@ -253,6 +255,9 @@ function gridregistry.setUnlocked(islandid, gridx, gridz, value)
 	end
 
 	entry.unlocked = true
+	if entry.part then
+		entry.part:SetAttribute("unlocked", true)
+	end
 	entry.part:SetAttribute("unlocked", true)
 	applyVisual(entry.part, true)
 
@@ -285,6 +290,37 @@ function gridregistry.resetIsland(islandid)
 	end
 	debug.log("gridregistry", "state", "island reset", { islandid = islandid })
 	return true
+end
+
+function gridregistry.getUnlockedTiles(islandid)
+	local tiles = {}
+	local islandGrid = registry[tostring(islandid)]
+	if not islandGrid then
+		return tiles
+	end
+	for z, row in pairs(islandGrid) do
+		for x, entry in pairs(row) do
+			local partUnlocked = entry.part and entry.part:GetAttribute("unlocked") == true
+			if entry.unlocked == true or partUnlocked then
+				table.insert(tiles, entry)
+			end
+		end
+	end
+	return tiles
+end
+
+function gridregistry.getAllTiles(islandid)
+	local tiles = {}
+	local islandGrid = registry[tostring(islandid)]
+	if not islandGrid then
+		return tiles
+	end
+	for _, row in pairs(islandGrid) do
+		for _, entry in pairs(row) do
+			table.insert(tiles, entry)
+		end
+	end
+	return tiles
 end
 
 buildRegistry()

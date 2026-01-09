@@ -379,6 +379,22 @@ local function onRequest(player, payload)
 			pushUpdate(player, result.message)
 		end
 		return result
+	elseif action == "claim_all" then
+		local quests = buildQuestList(player)
+		local claimed = 0
+		for _, quest in ipairs(quests) do
+			if quest.claimable then
+				local result = handleClaim(player, quest.id)
+				if result and result.success then
+					claimed += 1
+				end
+			end
+		end
+		if claimed > 0 then
+			pushUpdate(player, string.format("Claimed %d quests", claimed))
+			return { success = true, claimed = claimed }
+		end
+		return { success = false, reason = "none_claimable" }
 	end
 
 	return { success = false, reason = "unknown_action" }

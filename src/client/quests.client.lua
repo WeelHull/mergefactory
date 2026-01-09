@@ -64,7 +64,15 @@ local function ensureRefs()
 		return false
 	end
 
-	refs.questFrame = refs.questFrame or refs.playerUI:FindFirstChild("quest_frame")
+	if not refs.questFrame then
+		refs.questFrame = refs.playerUI:FindFirstChild("quest_frame", true)
+	end
+	if not refs.questFrame and refs.playerUI.Parent then
+		local pg = refs.playerUI.Parent
+		if pg and pg:IsA("PlayerGui") then
+			refs.questFrame = pg:FindFirstChild("quest_frame", true)
+		end
+	end
 	refs.scroll = refs.scroll or (refs.questFrame and refs.questFrame:FindFirstChild("scrolling_frame"))
 	refs.template = refs.template or (refs.scroll and refs.scroll:FindFirstChild("quest"))
 	refs.questButton = refs.questButton or PlayerUI.GetQuestButton()
@@ -216,15 +224,6 @@ local function hookMenuButtons()
 		return
 	end
 	clearConnections(menuConnections)
-	if refs.questButton then
-		table.insert(
-			menuConnections,
-			refs.questButton.Activated:Connect(function()
-				PurchasePrompt.Hide("quest_toggle")
-				PlayerUI.ToggleQuestMenu()
-			end)
-		)
-	end
 	if refs.closeButton then
 		table.insert(
 			menuConnections,

@@ -31,10 +31,47 @@ local refs = {
 	questButton = nil,
 	questFrame = nil,
 	questCloseButton = nil,
+	menuButtons3 = nil,
+	autoBuyButton = nil,
+	autoBuyLabel = nil,
+	autoTilesButton = nil,
+	autoTilesLabel = nil,
+	autoMergeButton = nil,
+	autoMergeLabel = nil,
+	autoQuestButton = nil,
+	autoQuestLabel = nil,
 }
 
 local warnedMissing = false
 local tierPreviewSeeded = false
+
+local function getVisibility(frame)
+	if not frame then
+		return nil
+	end
+	if typeof(frame.Visible) == "boolean" then
+		return frame.Visible, "Visible"
+	end
+	if typeof(frame.Enabled) == "boolean" then
+		return frame.Enabled, "Enabled"
+	end
+	return nil
+end
+
+local function setVisibility(frame, value)
+	if not frame then
+		return false
+	end
+	if typeof(frame.Visible) == "boolean" then
+		frame.Visible = value
+		return true
+	end
+	if typeof(frame.Enabled) == "boolean" then
+		frame.Enabled = value
+		return true
+	end
+	return false
+end
 
 local function formatCompact(amount)
 	local n = tonumber(amount) or 0
@@ -146,14 +183,56 @@ local function ensureRefs()
 		refs.playerUI = playerUI
 	end
 
-	if refs.playerUI then
-		refs.menuButtons = refs.menuButtons or refs.playerUI:FindFirstChild("menu_buttons")
-		refs.menuButtons2 = refs.menuButtons2 or refs.playerUI:FindFirstChild("menu_buttons_2")
-		refs.buildFrame = refs.buildFrame or refs.playerUI:FindFirstChild("build_frame")
-		refs.rebirthFrame = refs.rebirthFrame or refs.playerUI:FindFirstChild("rebirth_frame")
-		refs.settingsFrame = refs.settingsFrame or refs.playerUI:FindFirstChild("settings_frame")
-		refs.shopFrame = refs.shopFrame or refs.playerUI:FindFirstChild("shop_frame")
-		refs.questFrame = refs.questFrame or refs.playerUI:FindFirstChild("quest_frame")
+		if refs.playerUI then
+			refs.menuButtons = refs.menuButtons or refs.playerUI:FindFirstChild("menu_buttons")
+			refs.menuButtons2 = refs.menuButtons2 or refs.playerUI:FindFirstChild("menu_buttons_2")
+			refs.buildFrame = refs.buildFrame or refs.playerUI:FindFirstChild("build_frame")
+			refs.rebirthFrame = refs.rebirthFrame or refs.playerUI:FindFirstChild("rebirth_frame")
+			refs.settingsFrame = refs.settingsFrame or refs.playerUI:FindFirstChild("settings_frame")
+			refs.shopFrame = refs.shopFrame or refs.playerUI:FindFirstChild("shop_frame")
+			if refs.shopFrame and not refs.shopCloseButton then
+				refs.shopCloseButton = refs.shopFrame:FindFirstChild("close_menu", true)
+			end
+		if not refs.questFrame then
+			refs.questFrame = refs.playerUI:FindFirstChild("quest_frame", true)
+		end
+		if not refs.questFrame and refs.playerUI.Parent then
+			-- fallback: search whole PlayerGui in case quest_frame is sibling
+			local pg = refs.playerUI.Parent
+			if pg and pg:IsA("PlayerGui") then
+				refs.questFrame = pg:FindFirstChild("quest_frame", true)
+			end
+		end
+		if refs.settingsFrame and not refs.settingsCloseButton then
+			refs.settingsCloseButton = refs.settingsFrame:FindFirstChild("close_menu", true)
+		end
+		if refs.playerUI then
+			refs.menuButtons3 = refs.menuButtons3 or refs.playerUI:FindFirstChild("menu_buttons_3")
+		end
+		if refs.menuButtons3 and not refs.autoBuyButton then
+			refs.autoBuyButton = refs.menuButtons3:FindFirstChild("auto_buy")
+			if refs.autoBuyButton then
+				refs.autoBuyLabel = refs.autoBuyButton:FindFirstChild("label", true)
+			end
+		end
+			if refs.menuButtons3 and not refs.autoTilesButton then
+				refs.autoTilesButton = refs.menuButtons3:FindFirstChild("auto_tiles")
+				if refs.autoTilesButton then
+					refs.autoTilesLabel = refs.autoTilesButton:FindFirstChild("label", true)
+				end
+			end
+			if refs.menuButtons3 and not refs.autoMergeButton then
+				refs.autoMergeButton = refs.menuButtons3:FindFirstChild("auto_merge")
+				if refs.autoMergeButton then
+					refs.autoMergeLabel = refs.autoMergeButton:FindFirstChild("label", true)
+				end
+			end
+			if refs.menuButtons3 and not refs.autoQuestButton then
+				refs.autoQuestButton = refs.menuButtons3:FindFirstChild("auto_quest")
+				if refs.autoQuestButton then
+					refs.autoQuestLabel = refs.autoQuestButton:FindFirstChild("label", true)
+				end
+			end
 		refs.buildButton = refs.buildButton or (refs.menuButtons and refs.menuButtons:FindFirstChild("build_button") or nil)
 		if refs.menuButtons then
 			refs.rebirthButton = refs.rebirthButton or refs.menuButtons:FindFirstChild("rebirth_button")
@@ -235,9 +314,64 @@ function PlayerUI.GetSettingsButton()
 	return refs.settingsButton
 end
 
+function PlayerUI.GetSettingsCloseButton()
+	ensureRefs()
+	return refs.settingsCloseButton
+end
+
+function PlayerUI.GetShopCloseButton()
+	ensureRefs()
+	return refs.shopCloseButton
+end
+
+function PlayerUI.GetAutoBuyButton()
+	ensureRefs()
+	return refs.autoBuyButton
+end
+
+function PlayerUI.GetAutoBuyLabel()
+	ensureRefs()
+	return refs.autoBuyLabel
+end
+
+function PlayerUI.GetAutoTilesButton()
+	ensureRefs()
+	return refs.autoTilesButton
+end
+
+function PlayerUI.GetAutoTilesLabel()
+	ensureRefs()
+	return refs.autoTilesLabel
+end
+
+function PlayerUI.GetAutoMergeButton()
+	ensureRefs()
+	return refs.autoMergeButton
+end
+
+function PlayerUI.GetAutoMergeLabel()
+	ensureRefs()
+	return refs.autoMergeLabel
+end
+
+function PlayerUI.GetAutoQuestButton()
+	ensureRefs()
+	return refs.autoQuestButton
+end
+
+function PlayerUI.GetAutoQuestLabel()
+	ensureRefs()
+	return refs.autoQuestLabel
+end
+
 function PlayerUI.GetShopButton()
 	ensureRefs()
 	return refs.shopButton
+end
+
+function PlayerUI.GetShopFrame()
+	ensureRefs()
+	return refs.shopFrame
 end
 
 function PlayerUI.GetCloseButton()
@@ -376,9 +510,7 @@ function PlayerUI.HideQuestMenu()
 	if not ensureRefs() then
 		return
 	end
-	if refs.questFrame and typeof(refs.questFrame.Visible) == "boolean" then
-		refs.questFrame.Visible = false
-	end
+	setVisibility(refs.questFrame, false)
 end
 
 function PlayerUI.ShowBuildMenu()
@@ -419,12 +551,8 @@ function PlayerUI.HideAllMenus(exceptFrame)
 		refs.questFrame,
 	}
 	for _, frame in ipairs(targets) do
-		if frame and typeof(frame.Visible) == "boolean" then
-			if exceptFrame and frame == exceptFrame then
-				-- leave as-is
-			else
-				frame.Visible = false
-			end
+		if frame and not (exceptFrame and frame == exceptFrame) then
+			setVisibility(frame, false)
 		end
 	end
 end
@@ -434,12 +562,13 @@ function PlayerUI.ToggleRebirthMenu()
 		return
 	end
 	local frame = refs.rebirthFrame
-	if not frame or typeof(frame.Visible) ~= "boolean" then
+	local current = getVisibility(frame)
+	if current == nil then
 		return
 	end
-	local shouldShow = not frame.Visible
+	local shouldShow = not current
 	PlayerUI.HideAllMenus(shouldShow and frame or nil)
-	frame.Visible = shouldShow
+	setVisibility(frame, shouldShow)
 end
 
 function PlayerUI.ToggleQuestMenu()
@@ -447,24 +576,31 @@ function PlayerUI.ToggleQuestMenu()
 		return
 	end
 	local frame = refs.questFrame
-	if not frame or typeof(frame.Visible) ~= "boolean" then
+	if not frame then
+		debugutil.log("ui", "warn", "quest_toggle_missing_frame", {})
 		return
 	end
-	local shouldShow = not frame.Visible
+	local current = getVisibility(frame)
+	if current == nil then
+		debugutil.log("ui", "warn", "quest_toggle_missing_visibility", {
+			frame_path = frame and frame:GetFullName() or "nil",
+		})
+		return
+	end
+	local shouldShow = not current
 	if shouldShow then
-		local buildWasVisible = refs.buildFrame and refs.buildFrame.Visible
-		local menuButtonsVisible = refs.menuButtons and refs.menuButtons.Visible
 		PlayerUI.HideAllMenus(frame)
-		if buildWasVisible and refs.buildFrame then
-			refs.buildFrame.Visible = true
-		end
-		if menuButtonsVisible and refs.menuButtons then
+		if refs.menuButtons then
 			refs.menuButtons.Visible = true
 		end
-		frame.Visible = true
+		setVisibility(frame, true)
 	else
-		frame.Visible = false
+		setVisibility(frame, false)
 	end
+	debugutil.log("ui", "state", "quest_toggle", {
+		visible = getVisibility(frame),
+		path = frame and frame:GetFullName() or "nil",
+	})
 end
 
 function PlayerUI.ToggleSettingsMenu()
@@ -472,12 +608,13 @@ function PlayerUI.ToggleSettingsMenu()
 		return
 	end
 	local frame = refs.settingsFrame
-	if not frame or typeof(frame.Visible) ~= "boolean" then
+	local current = getVisibility(frame)
+	if current == nil then
 		return
 	end
-	local shouldShow = not frame.Visible
+	local shouldShow = not current
 	PlayerUI.HideAllMenus(shouldShow and frame or nil)
-	frame.Visible = shouldShow
+	setVisibility(frame, shouldShow)
 end
 
 function PlayerUI.ToggleShopMenu()
@@ -485,15 +622,16 @@ function PlayerUI.ToggleShopMenu()
 		return
 	end
 	local frame = refs.shopFrame
-	if not frame or typeof(frame.Visible) ~= "boolean" then
+	local current = getVisibility(frame)
+	if current == nil then
 		return
 	end
-	local shouldShow = not frame.Visible
+	local shouldShow = not current
 	if shouldShow then
 		PlayerUI.HideAllMenus(frame)
-		frame.Visible = true
+		setVisibility(frame, true)
 	else
-		frame.Visible = false
+		setVisibility(frame, false)
 	end
 end
 

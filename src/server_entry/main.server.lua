@@ -12,6 +12,11 @@ local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(game.ServerScriptService.Server.inventory)
 local Rebirth = require(game.ServerScriptService.Server.rebirth)
 local QuestSystem = require(game.ServerScriptService.Server.questsystem)
+local TimeCycle = require(game.ServerScriptService.Server.timecycle)
+local AutoBuy = require(game.ServerScriptService.Server.auto_buy)
+local AutoTiles = require(game.ServerScriptService.Server.auto_tiles)
+local AutoMerge = require(game.ServerScriptService.Server.auto_merge)
+local AutoOrchestrator = require(game.ServerScriptService.Server.auto_orchestrator)
 require(game.ServerScriptService.Server.playerlifecycle)
 
 local START_GRIDX = 1
@@ -161,6 +166,11 @@ for _, player in ipairs(Players:GetPlayers()) do
 	task.defer(ensureLeaderstats, player)
 end
 QuestSystem.Init()
+TimeCycle.Start()
+AutoBuy.Init()
+AutoTiles.Init()
+AutoMerge.Init()
+AutoOrchestrator.Init()
 
 -- client unlock intent handler (server-authoritative)
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
