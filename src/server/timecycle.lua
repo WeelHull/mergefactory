@@ -1,6 +1,7 @@
 -- timecycle: simple day/night cycle for world lighting.
 
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 
 local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("remotes")
 
@@ -15,6 +16,8 @@ local manualClock = 12
 local setEvent = remotes:FindFirstChild("timecycle_set") or Instance.new("RemoteEvent")
 setEvent.Name = "timecycle_set"
 setEvent.Parent = remotes
+local lastSetByPlayer = {}
+local MIN_REQUEST_INTERVAL = 0.25
 
 local function lerp(a, b, t)
 	return a + (b - a) * t
@@ -80,7 +83,19 @@ setEvent.OnServerEvent:Connect(function(player, payload)
 	if not clockTime then
 		return
 	end
-	TimeCycle.SetManual(clockTime)
+	-- Gate so players can only affect their own view: sanitize + rate limit, then echo back.
+	local now = os.clock()
+	local last = lastSetByPlayer[player]
+	if last and now - last < MIN_REQUEST_INTERVAL then
+		return
+	end
+	lastSetByPlayer[player] = now
+	local sanitized = math.clamp(clockTime, 0, 24)
+	setEvent:FireClient(player, { clockTime = sanitized })
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	lastSetByPlayer[player] = nil
 end)
 
 return TimeCycle

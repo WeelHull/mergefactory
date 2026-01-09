@@ -8,6 +8,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local debug = require(ServerScriptService.Server.debugutil)
 local gridregistry = require(ServerScriptService.Server.gridregistry)
 local MachineRegistry = require(ServerScriptService.Server.machineregistry)
+local Economy = require(ServerScriptService.Server.economy)
 
 local machinespawn = {}
 
@@ -115,6 +116,19 @@ local function resolveMultiplier(params)
 		end
 	end
 	return math.random(1, 4)
+end
+
+local function disableCollisions(model)
+	if not model then
+		return
+	end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+			part.CanQuery = true
+			part.CanTouch = true
+		end
+	end
 end
 
 function machinespawn.SpawnMachine(params)
@@ -254,6 +268,7 @@ function machinespawn.SpawnMachine(params)
 	clone:SetAttribute("rotation", rotation)
 	clone:SetAttribute("state", "Idle")
 	clone:SetAttribute("cashMultiplier", cashMultiplier)
+	disableCollisions(clone)
 
 	local machinesFolder = workspace:FindFirstChild("machines")
 	if not machinesFolder then
@@ -262,6 +277,7 @@ function machinespawn.SpawnMachine(params)
 		machinesFolder.Parent = workspace
 	end
 
+	-- Parent after attributes are set to reduce replication churn.
 	clone.Parent = machinesFolder
 
 	debug.log("machinespawn", "decision", "registering machine", {
@@ -290,6 +306,7 @@ function machinespawn.SpawnMachine(params)
 	})
 
 	clone:SetAttribute("machineId", machineId)
+	Economy.AddRate(ownerUserId, machineType, tier, cashMultiplier)
 
 	local bound = MachineRegistry.BindTile(machineId, islandid, gridx, gridz)
 	if not bound then

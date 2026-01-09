@@ -13,6 +13,7 @@ local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 local Inventory = require(ServerScriptService.Server.inventory)
 local MergeController = require(ServerScriptService.Server.mergecontroller)
 local QuestSystem = require(ServerScriptService.Server.questsystem)
+local Economy = require(ServerScriptService.Server.economy)
 
 local TRACE = true
 local BOUND = false
@@ -173,6 +174,7 @@ local function handleDeleteIntent(player, payload, islandid)
 	MachineRegistry.unregister(payload.machineId)
 	ctx.model:Destroy()
 	if machineType and tier then
+		Economy.RemoveRate(player.UserId, machineType, tier, ctx.model:GetAttribute("cashMultiplier"))
 		Inventory.Grant(player.UserId, machineType, tier, 1)
 		QuestSystem.RecordMachineRemoval(player, machineType, tier, 1)
 	end

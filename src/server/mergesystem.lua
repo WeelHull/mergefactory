@@ -5,6 +5,7 @@ local debug = require(ServerScriptService.Server.debugutil)
 local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local machinespawn = require(ServerScriptService.Server.machinespawn)
 local QuestSystem = require(ServerScriptService.Server.questsystem)
+local Economy = require(ServerScriptService.Server.economy)
 
 local MergeSystem = {}
 local MAX_TIER = 10
@@ -151,12 +152,16 @@ function MergeSystem.ExecuteMerge(machineAId, machineBId)
 	local gridz = modelB:GetAttribute("gridz")
 	local rotation = modelB:GetAttribute("rotation") or 0
 	local islandid = findIslandForMachine(machineBId)
+	local multA = modelA:GetAttribute("cashMultiplier")
+	local multB = modelB:GetAttribute("cashMultiplier")
 
 	-- Unbind and destroy old machines
 	MachineRegistry.UnbindTile(machineAId)
 	MachineRegistry.UnbindTile(machineBId)
 	MachineRegistry.unregister(machineAId)
 	MachineRegistry.unregister(machineBId)
+	Economy.RemoveRate(ownerId, machineType, tier, multA)
+	Economy.RemoveRate(ownerId, machineType, tier, multB)
 	modelA:Destroy()
 	modelB:Destroy()
 
@@ -168,6 +173,9 @@ function MergeSystem.ExecuteMerge(machineAId, machineBId)
 		gridz = gridz,
 		rotation = rotation,
 	})
+	if spawned then
+		Economy.AddRate(ownerId, machineType, newTier, multA)
+	end
 
 	debug.log("merge", "state", "relocate_merge_execute", {
 		source = machineAId,

@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local debugutil = require(game.ServerScriptService.Server.debugutil)
 local islandcontroller = require(game.ServerScriptService.Server.islandcontroller)
@@ -180,6 +181,18 @@ local canPlaceFunction = remotes:WaitForChild("canplaceontile")
 local spendCashFn = remotes:FindFirstChild("spend_cash") or Instance.new("RemoteFunction")
 local rebirthFn = remotes:FindFirstChild("rebirth_request") or Instance.new("RemoteFunction")
 local shopCoinsFn = remotes:FindFirstChild("shop_coins_purchase") or Instance.new("RemoteFunction")
+local SHOP_TEST_ENABLED = RunService:IsStudio()
+local SHOP_FREE_ACCESS = true -- set false when you wire this to paid access
+local SHOP_ALLOWED_MINUTES = {
+	[15] = true,
+	[30] = true,
+	[60] = true,
+	[180] = true,
+}
+local SHOP_DEFAULT_MINUTES = 15
+local SHOP_MAX_GRANT = 1_000_000 -- cap per request for test mode
+local SHOP_COOLDOWN_SECONDS = 5
+local shopCooldowns = {}
 spendCashFn.Name = "spend_cash"
 spendCashFn.Parent = remotes
 spendCashFn.OnServerInvoke = function(player, amount)
@@ -201,11 +214,26 @@ end
 shopCoinsFn.Name = "shop_coins_purchase"
 shopCoinsFn.Parent = remotes
 shopCoinsFn.OnServerInvoke = function(player, payload)
+	if not SHOP_TEST_ENABLED and not SHOP_FREE_ACCESS then
+		return { success = false, reason = "disabled" }
+	end
+	if not player then
+		return { success = false, reason = "no_player" }
+	end
+	local now = os.clock()
+	if shopCooldowns[player] and now - shopCooldowns[player] < SHOP_COOLDOWN_SECONDS then
+		return { success = false, reason = "cooldown" }
+	end
+	shopCooldowns[player] = now
 	local stamp = os.clock()
-	local minutes = type(payload) == "table" and tonumber(payload.minutes) or 15
-	local cps = player and player:GetAttribute("CashPerSecond") or 0
+	local minutesRaw = type(payload) == "table" and tonumber(payload.minutes) or SHOP_DEFAULT_MINUTES
+	local minutes = SHOP_ALLOWED_MINUTES[minutesRaw] and minutesRaw or SHOP_DEFAULT_MINUTES
+	local cps = math.max(0, player:GetAttribute("CashPerSecond") or 0)
 	local durationSeconds = math.max(0, math.floor(minutes * 60))
 	local amount = math.max(0, math.floor(cps * durationSeconds))
+	if amount > SHOP_MAX_GRANT then
+		amount = SHOP_MAX_GRANT
+	end
 	local granted = Economy.Grant(player, amount)
 	debugutil.log("shop", granted and "state" or "warn", "coins_purchase", {
 		userid = player and player.UserId,
@@ -221,6 +249,10 @@ shopCoinsFn.OnServerInvoke = function(player, payload)
 		stamp = stamp,
 	}
 end
+
+Players.PlayerRemoving:Connect(function(player)
+	shopCooldowns[player] = nil
+end)
 
 local function onTileUnlock(player, gridx, gridz)
 	debugutil.log("interaction", "decision", "tile unlock intent", {
@@ -266,20 +298,29 @@ local function onTileUnlock(player, gridx, gridz)
 		return
 	end
 
+	if price > 0 then
+		local spent = Economy.Spend(player, price)
+		if not spent then
+			debugutil.log("interaction", "warn", "tile unlock spend blocked", {
+				userid = player.UserId,
+				gridx = gx,
+				gridz = gz,
+				price = price,
+				cash = Economy.GetCash(player),
+			})
+			tileunlockEvent:FireClient(player, {
+				success = false,
+				gridx = gx,
+				gridz = gz,
+				reason = "insufficient_funds",
+				price = price,
+			})
+			return
+		end
+	end
+
 	local success = unlockcontroller.unlockTile(player, gx, gz)
 	if success then
-		if price > 0 then
-			local spent = Economy.Spend(player, price)
-			if not spent then
-				debugutil.log("interaction", "warn", "tile unlock spend failed post-unlock", {
-					userid = player.UserId,
-					gridx = gx,
-					gridz = gz,
-					price = price,
-					cash = Economy.GetCash(player),
-				})
-			end
-		end
 		debugutil.log("interaction", "state", "tile unlock success", {
 			userid = player.UserId,
 			gridx = gx,
@@ -291,6 +332,10 @@ local function onTileUnlock(player, gridx, gridz)
 			gridz = gz,
 		})
 	else
+		-- Unlock failed after spend: refund for safety.
+		if price > 0 then
+			Economy.Grant(player, price)
+		end
 		debugutil.log("interaction", "warn", "tile unlock blocked", {
 			userid = player.UserId,
 			gridx = gx,

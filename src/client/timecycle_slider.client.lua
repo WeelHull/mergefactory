@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -16,6 +17,39 @@ local refs = {
 
 local dragging = false
 local lastSend = 0
+
+local function setLighting(clockTime)
+	Lighting.ClockTime = clockTime
+	local isDay = clockTime >= 6 and clockTime < 18
+
+	if isDay then
+		Lighting.Brightness = 2
+		Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+		Lighting.Ambient = Color3.fromRGB(80, 80, 80)
+		Lighting.EnvironmentDiffuseScale = 1
+		Lighting.EnvironmentSpecularScale = 1
+	else
+		Lighting.Brightness = 1
+		Lighting.OutdoorAmbient = Color3.fromRGB(40, 40, 60)
+		Lighting.Ambient = Color3.fromRGB(20, 20, 30)
+		Lighting.EnvironmentDiffuseScale = 0.6
+		Lighting.EnvironmentSpecularScale = 0.6
+	end
+
+	-- Subtle dawn/dusk tint to mirror server logic.
+	local dawn = 6
+	local dusk = 18
+	local t = 0
+	if clockTime < dawn then
+		t = math.clamp((clockTime + 24 - dusk) / (dawn + 24 - dusk), 0, 1)
+	elseif clockTime > dusk then
+		t = math.clamp((clockTime - dusk) / (dawn + 24 - dusk), 0, 1)
+	else
+		t = math.clamp((clockTime - dawn) / (dusk - dawn), 0, 1)
+	end
+	local fog = (0.5 + (0 - 0.5) * t)
+	Lighting.FogEnd = 1000 + fog * 500
+end
 
 local function findControls()
 	local playerUI = playerGui:FindFirstChild("PlayerUI")
@@ -60,6 +94,7 @@ local function setRatio(ratio)
 	refs.button.Position = UDim2.new(r, 0, 0.5, 0)
 	-- Map 0 (left) = day (ClockTime ~12), 1 (right) = night (ClockTime ~0).
 	local clock = 12 * (1 - r)
+	setLighting(clock)
 	sendClock(clock)
 end
 
@@ -116,6 +151,15 @@ playerGui.ChildAdded:Connect(function(child)
 	if child.Name == "PlayerUI" then
 		task.defer(bind)
 	end
+end)
+
+setEvent.OnClientEvent:Connect(function(payload)
+	local clockTime = type(payload) == "table" and tonumber(payload.clockTime) or nil
+	if not clockTime then
+		return
+	end
+	-- Server echos back sanitized values; apply locally without affecting others.
+	setLighting(math.clamp(clockTime, 0, 24))
 end)
 
 bind()

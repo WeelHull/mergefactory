@@ -18,6 +18,7 @@ updateEvent.Parent = remotes
 local requestFn = remotes:FindFirstChild("quest_request") or Instance.new("RemoteFunction")
 requestFn.Name = "quest_request"
 requestFn.Parent = remotes
+local AutoAccess = require(ServerScriptService.Server.modules.autoaccess)
 
 local MAX_TIER = 10
 local PLACEMENT_STEPS_PER_TIER = math.huge -- infinite progression
@@ -368,6 +369,9 @@ end
 local function onRequest(player, payload)
 	if type(payload) ~= "table" then
 		return { success = false, reason = "invalid_payload" }
+	end
+	if not AutoAccess.HasAccess(player, "auto_quest") then
+		return { success = false, reason = "no_access" }
 	end
 	local action = payload.action
 	if action == "sync" then

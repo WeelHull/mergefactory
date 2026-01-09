@@ -8,8 +8,11 @@ local MachineRegistry = require(ServerScriptService.Server.machineregistry)
 local MergeSystem = require(ServerScriptService.Server.mergesystem)
 local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
+local AutoAccess = require(ServerScriptService.Server.modules.autoaccess)
 
 local AutoMerge = {}
+local lastRequestAt = {}
+local REQUEST_COOLDOWN = 0.5 -- seconds between auto merge requests per player
 
 local function computeMergePrice(tier, player)
 	local nextTier = math.max(1, (tier or 0) + 1)
@@ -60,6 +63,15 @@ local function handleRequest(player)
 	if not player then
 		return { success = false, reason = "no_player" }
 	end
+	if not AutoAccess.HasAccess(player, "auto_merge") then
+		return { success = false, reason = "no_access" }
+	end
+	local now = os.clock()
+	local last = lastRequestAt[player]
+	if last and now - last < REQUEST_COOLDOWN then
+		return { success = false, reason = "cooldown" }
+	end
+	lastRequestAt[player] = now
 	local cash = Economy.GetCash(player)
 	local pair = findPair(player)
 	if not pair then

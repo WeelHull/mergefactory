@@ -8,10 +8,13 @@ local gridregistry = require(ServerScriptService.Server.gridregistry)
 local unlockrules = require(ServerScriptService.Server.unlockrules)
 local unlockcontroller = require(ServerScriptService.Server.unlockcontroller)
 local IslandValidator = require(ServerScriptService.Server.islandvalidator)
+local AutoAccess = require(ServerScriptService.Server.modules.autoaccess)
 local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
 
 local AutoTiles = {}
+local lastRequestAt = {}
+local REQUEST_COOLDOWN = 0.5 -- seconds between auto tile requests per player
 
 local function keyFor(x, z)
 	return tostring(x) .. ":" .. tostring(z)
@@ -77,6 +80,10 @@ local function cheapestCandidate(islandid, cps, discount)
 				best = cand
 			end
 		end
+		-- Early exit if we found a very cheap candidate to reduce scanning.
+		if best and best.price <= 0 then
+			break
+		end
 	end
 	return best
 end
@@ -102,6 +109,9 @@ function AutoTiles.NextPrice(player)
 	if not player then
 		return nil
 	end
+	if not AutoAccess.HasAccess(player, "auto_tiles") then
+		return nil
+	end
 	local islandid = player:GetAttribute("islandid")
 	if not IslandValidator.isValidIslandId(islandid) then
 		return nil
@@ -116,6 +126,15 @@ function AutoTiles.UnlockOne(player)
 	if not player then
 		return { success = false, reason = "no_player" }
 	end
+	if not AutoAccess.HasAccess(player, "auto_tiles") then
+		return { success = false, reason = "no_access" }
+	end
+	local now = os.clock()
+	local last = lastRequestAt[player]
+	if last and now - last < REQUEST_COOLDOWN then
+		return { success = false, reason = "cooldown" }
+	end
+	lastRequestAt[player] = now
 	local islandid = player:GetAttribute("islandid")
 	if not IslandValidator.isValidIslandId(islandid) then
 		return { success = false, reason = "invalid_island" }

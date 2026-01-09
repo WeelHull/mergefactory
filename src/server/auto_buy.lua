@@ -11,6 +11,7 @@ local gridregistry = require(ServerScriptService.Server.gridregistry)
 local IslandValidator = require(ServerScriptService.Server.islandvalidator)
 local Economy = require(ServerScriptService.Server.economy)
 local EconomyConfig = require(ReplicatedStorage.Shared.economy_config)
+local AutoAccess = require(ServerScriptService.Server.modules.autoaccess)
 local Inventory = require(ServerScriptService.Server.inventory)
 local QuestSystem = require(ServerScriptService.Server.questsystem)
 
@@ -20,9 +21,14 @@ requestFn.Name = "auto_buy_request"
 requestFn.Parent = remotes
 
 local AutoBuy = {}
+local lastRequestAt = {}
+local REQUEST_COOLDOWN = 0.5 -- seconds between auto buy requests per player
 
-local function getFreeTiles(islandid)
+local function getFreeTiles(islandid, firstOnly)
 	if not IslandValidator.isValidIslandId(islandid) then
+		if firstOnly then
+			return nil
+		end
 		return {}
 	end
 	local tiles = gridregistry.getUnlockedTiles(islandid)
@@ -40,12 +46,16 @@ local function getFreeTiles(islandid)
                 if not occupied then
                     entry.gridx = gx
                     entry.gridz = gz
+                    if firstOnly then
+                        return entry
+                    end
                     table.insert(free, entry)
                 end
             end
         end
     end
-    if #free == 0 then
+    local noneFound = #free == 0
+    if noneFound then
         debugutil.log("autobuy", "warn", "no_free_tiles_found", {
             islandid = islandid,
             tiles_considered = #tiles,
@@ -55,6 +65,9 @@ local function getFreeTiles(islandid)
             sample_unlocked = tiles[1] and tiles[1].unlocked or nil,
             sample_attr = (tiles[1] and tiles[1].part and tiles[1].part:GetAttribute("unlocked")) or nil,
         })
+    end
+    if firstOnly then
+        return free[1]
     end
     return free
 end
@@ -73,71 +86,64 @@ local function handleRequest(player)
 	if not player then
 		return { success = false, reason = "no_player" }
 	end
+	if not AutoAccess.HasAccess(player, "auto_buy") then
+		return { success = false, reason = "no_access" }
+	end
+	local now = os.clock()
+	local last = lastRequestAt[player]
+	if last and now - last < REQUEST_COOLDOWN then
+		return { success = false, reason = "cooldown" }
+	end
+	lastRequestAt[player] = now
 	local islandid = player:GetAttribute("islandid")
 	if not IslandValidator.isValidIslandId(islandid) then
 		return { success = false, reason = "invalid_island" }
 	end
 
-	local freeTiles = getFreeTiles(islandid)
-	if #freeTiles == 0 then
+	local tile = getFreeTiles(islandid, true)
+	if not tile then
 		return { success = false, reason = "no_tile" }
 	end
 
-	local placed = 0
-	local spentTotal = 0
-	for _, tile in ipairs(freeTiles) do
-		local cps = player:GetAttribute("CashPerSecond") or 0
-		local price = EconomyConfig.GetMachinePrice("generator", 1, cps)
-		local cash = Economy.GetCash(player)
-		if price > cash and price > 0 then
-			break
-		end
-
-		local paid, source = ensurePaid(player, price)
-		if not paid then
-			break
-		end
-
-		local spawned = MachineSpawn.SpawnMachine({
-			ownerUserId = player.UserId,
-			machineType = "generator",
-			tier = 1,
-			gridx = tile.gridx,
-			gridz = tile.gridz,
-			rotation = 0,
-		})
-
-		if not spawned then
-			if price > 0 then
-				Economy.Grant(player, price)
-			end
-			debugutil.log("autobuy", "warn", "auto_buy_failed_spawn", {
-					userid = player.UserId,
-					price = price,
-					tile = { x = tile.gridx, z = tile.gridz },
-				})
-			break
-		end
-
-		placed += 1
-		spentTotal += math.max(0, price)
-		QuestSystem.RecordMachine(player, "generator", 1)
+	local cps = player:GetAttribute("CashPerSecond") or 0
+	local price = EconomyConfig.GetMachinePrice("generator", 1, cps)
+	local cash = Economy.GetCash(player)
+	if price > cash and price > 0 then
+		return { success = false, reason = "insufficient_funds", price = price }
 	end
 
-	if placed < 1 then
-		return { success = false, reason = "insufficient_funds" }
+	local paid, source = ensurePaid(player, price)
+	if not paid then
+		return { success = false, reason = "insufficient_funds", price = price }
 	end
 
-	debugutil.log("autobuy", "state", "auto_buy_success", {
-		userid = player.UserId,
-		placed = placed,
-		spent = spentTotal,
+	local spawned = MachineSpawn.SpawnMachine({
+		ownerUserId = player.UserId,
+		machineType = "generator",
+		tier = 1,
+		gridx = tile.gridx,
+		gridz = tile.gridz,
+		rotation = 0,
 	})
+
+	if not spawned then
+		if price > 0 then
+			Economy.Grant(player, price)
+		end
+		debugutil.log("autobuy", "warn", "auto_buy_failed_spawn", {
+			userid = player.UserId,
+			price = price,
+			tile = { x = tile.gridx, z = tile.gridz },
+		})
+		return { success = false, reason = "spawn_failed" }
+	end
+
+	QuestSystem.RecordMachine(player, "generator", 1)
 
 	return {
 		success = true,
-		placed = placed,
-		spent = spentTotal,
+		placed = 1,
+		spent = math.max(0, price),
 	}
 end
 
@@ -151,11 +157,7 @@ end
 
 -- Returns first free tile entry or nil.
 local function getFirstFreeTile(islandid)
-	local freeTiles = getFreeTiles(islandid)
-	if #freeTiles == 0 then
-		return nil
-	end
-	return freeTiles[1]
+	return getFreeTiles(islandid, true)
 end
 
 function AutoBuy.NextPrice(player)

@@ -5,6 +5,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local debugutil = require(ServerScriptService.Server.debugutil)
 local Economy = require(ServerScriptService.Server.economy)
+local AutoAccess = require(ServerScriptService.Server.modules.autoaccess)
 local AutoTiles = require(ServerScriptService.Server.auto_tiles)
 local AutoBuy = require(ServerScriptService.Server.auto_buy)
 local AutoMerge = require(ServerScriptService.Server.auto_merge)
@@ -19,6 +20,7 @@ local AutoOrchestrator = {}
 
 -- state[player] = { tiles=true/false, buy=bool, merge=bool, running=bool }
 local stateByPlayer = {}
+local lastActionAt = {} -- player -> os.clock()
 
 local function getState(player)
 	if not player then
@@ -78,20 +80,26 @@ local function runLoop(player)
 		if not (st.tiles or st.buy or st.merge) then
 			break
 		end
-		local kind = nil
-		kind = select(1, pickAction(player, st))
-		if not kind then
-			task.wait(1)
-		else
-			if kind == "tiles" then
-				AutoTiles.UnlockOne(player)
-			elseif kind == "buy" then
-				AutoBuy.PlaceOne(player)
-			elseif kind == "merge" then
-				AutoMerge.MergeOne(player)
-			end
-			task.wait(0.35)
+		local kind = select(1, pickAction(player, st))
+		if kind == "tiles" then
+			AutoTiles.UnlockOne(player)
+		elseif kind == "buy" then
+			AutoBuy.PlaceOne(player)
+		elseif kind == "merge" then
+			AutoMerge.MergeOne(player)
 		end
+		local now = os.clock()
+		local last = lastActionAt[player] or now
+		lastActionAt[player] = now
+		-- Adaptive pacing: slow down slightly as more tiles unlock.
+		local tileCount = 0
+		local islandid = player:GetAttribute("islandid")
+		if islandid then
+			tileCount = #require(ServerScriptService.Server.gridregistry).getUnlockedTiles(islandid)
+		end
+		local extraDelay = math.min(2.5, tileCount * 0.004) -- +0.004s per tile, capped
+		local baseDelay = kind and 0.7 or 1.0
+		task.wait(baseDelay + extraDelay)
 	end
 	st.running = false
 end
@@ -100,6 +108,15 @@ local function setFlag(player, payload)
 	local st = getState(player)
 	if not st then
 		return { success = false, reason = "no_state" }
+	end
+	if payload.tiles == true and not AutoAccess.HasAccess(player, "auto_tiles") then
+		return { success = false, reason = "no_access_tiles" }
+	end
+	if payload.buy == true and not AutoAccess.HasAccess(player, "auto_buy") then
+		return { success = false, reason = "no_access_buy" }
+	end
+	if payload.merge == true and not AutoAccess.HasAccess(player, "auto_merge") then
+		return { success = false, reason = "no_access_merge" }
 	end
 	if payload.tiles ~= nil then
 		st.tiles = payload.tiles == true
@@ -120,6 +137,9 @@ toggleFn.OnServerInvoke = function(player, payload)
 	if type(payload) ~= "table" then
 		return { success = false, reason = "invalid_payload" }
 	end
+	if not AutoAccess.HasAccess(player) then
+		return { success = false, reason = "no_access" }
+	 end
 	return setFlag(player, payload)
 end
 

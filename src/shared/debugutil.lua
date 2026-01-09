@@ -1,6 +1,6 @@
 local debugutil = {}
 
-debugutil.enabled = true
+debugutil.enabled = false -- disable client logs by default; flip to true when debugging
 
 local function sanitize(value)
 	-- gsub returns the replaced string and a count; capture only the string to avoid leaking extra args

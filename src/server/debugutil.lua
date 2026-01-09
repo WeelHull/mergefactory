@@ -3,7 +3,7 @@
 
 local debug = {}
 
-debug.enabled = true -- global switch; set false to silence all logs
+debug.enabled = false -- disable verbose logging in production; set true for troubleshooting
 
 local ALLOWED_LEVELS = {
 	init = true,
